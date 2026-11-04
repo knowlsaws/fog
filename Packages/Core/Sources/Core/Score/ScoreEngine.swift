@@ -22,6 +22,9 @@ public struct ScoreInput: Sendable {
 
     var minutesToNextTwilightOverride: Double?
     var minutesToNextTideTurnOverride: Double?
+    /// 推移計算で 1 日 1 回だけ計算した日の出入りと月（点ごとの再計算を避ける）
+    var precomputedSun: SunTimes?
+    var precomputedMonth: Int?
 }
 
 /// 内訳の 1 行（ホームの内訳シート）。
@@ -130,7 +133,7 @@ public struct ScoreEngine: Sendable {
             parts.append(.init(factor: .water, points: p, detail: String(format: "水温 %.1f℃", sst)))
             total += p
         } else {
-            let month = Calendar.current.component(.month, from: input.at)
+            let month = buckets.month
             let p: Double = [4, 5, 6, 10, 11, 12].contains(month) ? 4 : ([7, 8].contains(month) ? -2 : 0)
             parts.append(.init(factor: .water, points: p, detail: "\(month)月"))
             total += p
@@ -180,7 +183,7 @@ public struct ConditionBuckets: Hashable, Sendable {
     public init(input: ScoreInput) {
         let env = input.env
         // 光量：スナップショットの日の出入りが無ければ天文計算
-        let sun = SunCalculator.times(on: input.at, at: input.coordinate, timeZone: input.timeZone)
+        let sun = input.precomputedSun ?? SunCalculator.times(on: input.at, at: input.coordinate, timeZone: input.timeZone)
         let sunrise = env.sunriseAt ?? sun.sunrise
         let sunset = env.sunsetAt ?? sun.sunset
         var light: Light = .day
@@ -206,8 +209,12 @@ public struct ConditionBuckets: Hashable, Sendable {
 
         if let w = env.windSpeedMS { wind = w <= 3 ? .calm : (w <= 8 ? .moderate : .strong) } else { wind = .unknown }
         tideName = env.tideName
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = input.timeZone
-        month = cal.component(.month, from: input.at)
+        if let m = input.precomputedMonth {
+            month = m
+        } else {
+            var cal = Calendar(identifier: .gregorian)
+            cal.timeZone = input.timeZone
+            month = cal.component(.month, from: input.at)
+        }
     }
 }

@@ -89,7 +89,14 @@ public struct PersonalModel: Hashable, Sendable {
 
     /// バケットごとの対数比を合計し、重みを掛けて ±20 点に収める。
     public func adjustment(for buckets: ConditionBuckets, species: String?) -> (points: Double, detail: String) {
-        let model = species.flatMap { bySpecies[$0] } ?? self
+        // 魚種別は自分がその魚種を釣った実績だけで判断する（未釣果の魚種は補正なし）
+        let model: PersonalModel
+        if let species {
+            guard let sp = bySpecies[species] else { return (0, "データ不足") }
+            model = sp
+        } else {
+            model = self
+        }
         guard model.total.hours >= 2 else { return (0, "データ不足") }
         let base = model.total.rate
         func term(_ stat: Stat?) -> Double {

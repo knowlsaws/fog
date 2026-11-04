@@ -18,10 +18,19 @@ public enum ScoreTimeline {
                                envAt: (Date) -> EnvSnapshot) -> [ScorePoint] {
         guard to > from, stepMinutes > 0 else { return [] }
         var points: [ScorePoint] = []
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        var sunByDay: [Int: SunTimes] = [:]
         var t = from
         while t <= to {
             let env = envAt(t)
-            let r = engine.score(ScoreInput(at: t, coordinate: coordinate, env: env, species: species, timeZone: timeZone))
+            let dayKey = Int((t.timeIntervalSince1970 + Double(timeZone.secondsFromGMT(for: t))) / 86_400)
+            let sun: SunTimes
+            if let s = sunByDay[dayKey] { sun = s } else { sun = SunCalculator.times(on: t, at: coordinate, timeZone: timeZone); sunByDay[dayKey] = sun }
+            var input = ScoreInput(at: t, coordinate: coordinate, env: env, species: species, timeZone: timeZone)
+            input.precomputedSun = sun
+            input.precomputedMonth = cal.component(.month, from: t)
+            let r = engine.score(input)
             points.append(ScorePoint(at: t, score: r.score, isForecast: r.isForecast, confidence: r.confidence))
             t = t.addingTimeInterval(Double(stepMinutes) * 60)
         }
