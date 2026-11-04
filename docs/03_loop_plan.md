@@ -8,8 +8,8 @@
 
 | # | ループ | 状態 | PR | 備考 |
 | --- | --- | --- | --- | --- |
-| L0 | リポジトリ基盤と CI | next | | 開発者の Secrets 登録待ちの部分は PR に明記 |
-| L1 | データモデルと永続化 | pending | | |
+| L0 | リポジトリ基盤と CI | review | main 直push (3d27603) | core-tests / ios-build 緑。TestFlight 確認は開発者の Secrets 登録後（docs/05_setup_for_developer.md） |
+| L1 | データモデルと永続化 | next | | L0 の TestFlight 確認を待たずに着手してよい |
 | L2 | 天文計算と潮汐エンジン（Core） | pending | | |
 | L3 | 環境データ取得 | pending | | |
 | L4 | 釣行セッション自動検出 | pending | | |

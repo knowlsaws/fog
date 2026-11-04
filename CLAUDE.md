@@ -30,7 +30,7 @@
 
 ## ループの回し方（必ずこの手順）
 
-1. `docs/03_loop_plan.md` の状態表で **status が `next` のループ**を1つ選ぶ。先行ループが `done` でなければ着手しない。
+1. `docs/03_loop_plan.md` の状態表で **status が `next` のループ**を1つ選ぶ。先行ループが `done` か `review`（CI 緑・開発者の実機確認待ち）でなければ着手しない。`blocked` の備考に自分で解消できることが書いてあれば先にそれをやる。
 2. ブランチ `loop/L{番号}-{slug}` を main から切る。
 3. そのループの「受け入れ条件」をすべて満たすまで実装する。
    - `Packages/Core` の変更は `cd Packages/Core && swift test` をローカル（Linux）で通す。
