@@ -17,12 +17,17 @@ final class SpotsViewModel {
     }
 
     private(set) var cards: [Card] = []
-    /// 表示中の地図範囲で見つけた漁港・港（未登録）。カードにも並べる
-    private(set) var portCandidates: [Card] = []
+    /// 表示中の地図範囲の漁港・港（未登録）。同梱データ（国土数値情報）＋地図検索の補完。カードにも並べる
+    var portCandidates: [Card] {
+        catalogPorts + searchPorts.filter { sp in !catalogPorts.contains { Geo.distanceMeters($0.spot.coordinate, sp.spot.coordinate) < 500 } }
+    }
+    private var catalogPorts: [Card] = []
+    private var searchPorts: [Card] = []
     private(set) var currentLocation: Coordinate?
     private var services: AppServices?
     private let cache = AnalysisCache()
     private var candidateIDs: [String: UUID] = [:]
+    private let portCatalog = PortCatalog.bundled()
     private var lastSearchedRegion: MKCoordinateRegion?
     private var searchTask: Task<Void, Never>?
 
@@ -60,6 +65,8 @@ final class SpotsViewModel {
     /// 地図の表示範囲が変わったら、その範囲の漁港・港を MapKit で探して候補にする。範囲が広すぎるときは探さない。
     func searchPorts(in region: MKCoordinateRegion) {
         guard region.span.latitudeDelta < 1.5 else { return }
+        // 同梱の港データ（国土数値情報）を先に置く。通信なしで確実に出る
+        catalogCandidates(in: region)
         if let last = lastSearchedRegion {
             let moved = Geo.distanceMeters(Coordinate(latitude: last.center.latitude, longitude: last.center.longitude),
                                            Coordinate(latitude: region.center.latitude, longitude: region.center.longitude))
@@ -80,6 +87,39 @@ final class SpotsViewModel {
             }
             await MainActor.run { self?.setPortCandidates(found) }
         }
+    }
+
+    /// 同梱の港データから表示範囲の候補を作る
+    private func catalogCandidates(in region: MKCoordinateRegion) {
+        guard let services, !portCatalog.isEmpty else { return }
+        let latR = (region.center.latitude - region.span.latitudeDelta / 2)...(region.center.latitude + region.span.latitudeDelta / 2)
+        let lonR = (region.center.longitude - region.span.longitudeDelta / 2)...(region.center.longitude + region.span.longitudeDelta / 2)
+        let existing = (try? services.store.spots()) ?? []
+        let engine = scoreEngine()
+        let now = Date()
+        var out: [Card] = []
+        for port in portCatalog.ports(latitude: latR, longitude: lonR, limit: 60) {
+            let c = port.coordinate
+            if existing.contains(where: { Geo.distanceMeters($0.coordinate, c) < 300 }) { continue }
+            let key = "\(port.name)@\(Int(c.latitude * 1000)),\(Int(c.longitude * 1000))"
+            let id = candidateIDs[key] ?? UUID()
+            candidateIDs[key] = id
+            let env = services.environment.snapshot(at: now, coordinate: c)
+            let score = engine.score(ScoreInput(at: now, coordinate: c, env: env)).score
+            out.append(Card(spot: Spot(id: id, name: port.name, coordinate: c, isRegistered: false), stats: Analytics.spotStats(sessions: []), score: score,
+                            distanceM: currentLocation.map { Geo.distanceMeters($0, c) }, isCandidate: true))
+        }
+        catalogPorts = out
+    }
+
+    private func scoreEngine() -> ScoreEngine {
+        guard let services else { return ScoreEngine() }
+        let sessions = (try? services.store.sessions()) ?? []
+        let spots = (try? services.store.spots()) ?? []
+        let personal = cache.value("personalModel", store: services.store) {
+            PersonalModel.learn(from: sessions.filter { !$0.isActive }, coordinateOf: { s in spots.first { $0.id == s.spotID }?.coordinate })
+        }
+        return ScoreEngine(personal: personal.total.hours >= 1 ? personal : nil)
     }
 
     private func setPortCandidates(_ items: [MKMapItem]) {
@@ -107,18 +147,20 @@ final class SpotsViewModel {
             out.append(Card(spot: spot, stats: Analytics.spotStats(sessions: []), score: score,
                             distanceM: currentLocation.map { Geo.distanceMeters($0, c) }, isCandidate: true))
         }
-        portCandidates = out
+        searchPorts = out
     }
 
     /// 名前が「〜漁港」「〜港」「〜岸壁」「〜埠頭」「〜防波堤」で終わるものだけを漁港とみなす。
     /// 「〜漁港緑地」「〜港店」「〜港前」のような店・公園・バス停・交差点は除く。マリーナ分類はそのまま通す。
     static func looksLikePort(name: String, category: MKPointOfInterestCategory?) -> Bool {
-        if category == .marina { return true }
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        let excluded = ["店", "緑地", "公園", "駅", "前", "通", "通り", "線", "バス", "停", "入口", "交差点", "会社", "会館", "センター", "市場", "組合",
-                        "事務所", "倉庫", "工場", "ビル", "ホテル", "食堂", "レストラン", "カフェ", "温泉", "橋", "トンネル", "駐車場", "学校", "病院", "郵便局", "神社", "寺"]
+        // 店・施設・交通の名前を除く（マリーナ分類でも名前で判断する。ボート乗り場やスポーツ店が紛れるため）
+        let excluded = ["店", "緑地", "公園", "駅", "前", "通", "線", "バス", "停", "入口", "交差点", "会社", "会館", "センター", "市場", "組合", "乗り場", "乗場",
+                        "事務所", "倉庫", "工場", "ビル", "ホテル", "旅館", "民宿", "食堂", "レストラン", "カフェ", "居酒屋", "寿司", "鮨", "屋", "亭", "温泉", "橋", "トンネル",
+                        "駐車場", "学校", "病院", "郵便局", "神社", "寺", "スポーツ", "ショップ", "釣具", "水産", "株式", "有限", "サービス", "クラブ", "教室", "こちら", "とれたて"]
         if excluded.contains(where: { trimmed.contains($0) }) { return false }
-        let suffixes = ["漁港", "港", "岸壁", "埠頭", "ふ頭", "防波堤", "波止", "堤防", "桟橋"]
+        guard trimmed.count <= 12 else { return false }
+        let suffixes = ["漁港", "港", "岸壁", "埠頭", "ふ頭", "防波堤", "波止", "堤防", "桟橋", "築港", "船だまり", "船溜", "船溜り"]
         return suffixes.contains { trimmed.hasSuffix($0) }
     }
 
@@ -129,7 +171,8 @@ final class SpotsViewModel {
         spot.isRegistered = true
         spot.createdAt = .now
         try? services.store.upsert(spot)
-        portCandidates.removeAll { $0.id == card.id }
+        catalogPorts.removeAll { $0.id == card.id }
+        searchPorts.removeAll { $0.id == card.id }
         refresh()
     }
 

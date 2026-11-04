@@ -43,6 +43,17 @@ final class HomeViewModel {
     private(set) var rangeStart: Date = .now
     private(set) var rangeEnd: Date = .now
     var scrollTarget: Date?
+    /// グラフに出している日（0 = 今日、-1 = 昨日、+n = n 日後）
+    var dayOffset: Int = 0 { didSet { updateDay() } }
+    private(set) var dayStart: Date = .now
+    private(set) var dayEnd: Date = .now
+    private(set) var dayTimeline: [ScorePoint] = []
+    private(set) var dayTide: [TidePoint] = []
+    private(set) var dayExtremes: [TideExtreme] = []
+    /// その日の 0,3,…,21 時の環境（詳細表）
+    private(set) var dayDetail: [EnvSnapshot] = []
+    private(set) var seaSurfaceTempC: Double?
+    private(set) var nextFetchAt: Date?
 
     private var services: AppServices?
     private let cache = AnalysisCache()
@@ -125,6 +136,9 @@ final class HomeViewModel {
             }
             sunTimesByDay = stride(from: 0, through: end.timeIntervalSince(start), by: 86_400).map { SunCalculator.times(on: start.addingTimeInterval($0), at: coordinate, timeZone: timeZone) }
         }
+        updateDay()
+        seaSurfaceTempC = current.seaSurfaceTempC
+        nextFetchAt = env.gate.nextAllowed("weather:" + ForecastCache.key(for: coordinate))
         let wind = inputs.weather.compactMap { s in s.windSpeedMS.map { (s.at, $0) } }
         events = ScoreEvents.upcoming(from: now, count: 3, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
 
@@ -139,6 +153,36 @@ final class HomeViewModel {
         guard let services else { return }
         await services.environment.refreshIfNeeded(at: coordinate, now: .now, force: true)
         await refresh()
+    }
+
+    /// 日単位の範囲。前日から推移の終わりまでの間に収める
+    var dayOffsetRange: ClosedRange<Int> {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
+        let today = cal.startOfDay(for: now)
+        let first = Int((rangeStart.timeIntervalSince(today) / 86_400).rounded(.down))
+        let last = Int((rangeEnd.timeIntervalSince(today) / 86_400).rounded(.down)) - 1
+        return min(first, 0)...max(last, 0)
+    }
+
+    private func updateDay() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
+        let today = cal.startOfDay(for: now)
+        let offset = min(max(dayOffset, dayOffsetRange.lowerBound), dayOffsetRange.upperBound)
+        dayStart = today.addingTimeInterval(Double(offset) * 86_400)
+        dayEnd = dayStart.addingTimeInterval(86_400)
+        dayTimeline = timeline.filter { $0.at >= dayStart && $0.at <= dayEnd }
+        dayTide = tideCurve.filter { $0.at >= dayStart && $0.at <= dayEnd }
+        dayExtremes = tideExtremes.filter { $0.at >= dayStart && $0.at <= dayEnd }
+        if let services {
+            dayDetail = stride(from: 0, to: 24, by: 3).map { h in services.environment.snapshot(at: dayStart.addingTimeInterval(Double(h) * 3600), coordinate: coordinate) }
+        }
+    }
+
+    /// イベント列のタップ：その時刻の日へ
+    func show(date: Date) {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
+        let today = cal.startOfDay(for: now)
+        dayOffset = Int((cal.startOfDay(for: date).timeIntervalSince(today) / 86_400).rounded())
     }
 
     func select(spot: Spot) {
