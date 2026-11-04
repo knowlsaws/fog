@@ -91,10 +91,12 @@ final class SessionDetectionTests: XCTestCase {
     func testMeshKeyAndCenter() {
         let key = Mesh.key(for: port)
         XCTAssertTrue(key.hasPrefix("30m:"))
-        XCTAssertEqual(key, Mesh.key(for: Coordinate(latitude: port.latitude + 0.00005, longitude: port.longitude + 0.00005)))
-        XCTAssertNotEqual(key, Mesh.key(for: Coordinate(latitude: port.latitude + 0.001, longitude: port.longitude)))
         let center = Mesh.center(for: port)
         XCTAssertLessThan(Geo.distanceMeters(center, port), 25)
+        // メッシュ中心から数 m 以内は同じキー、1 セル以上離れれば別のキー
+        XCTAssertEqual(key, Mesh.key(for: center))
+        XCTAssertEqual(key, Mesh.key(for: Coordinate(latitude: center.latitude + 0.00003, longitude: center.longitude + 0.00003)))
+        XCTAssertNotEqual(key, Mesh.key(for: Coordinate(latitude: port.latitude + 0.001, longitude: port.longitude)))
     }
 
     func testSettingsBySensitivity() {
