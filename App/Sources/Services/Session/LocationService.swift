@@ -10,14 +10,14 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     enum Mode { case off, monitoring, tracking }
 
     private let manager = CLLocationManager()
-    private(set) var authorization: CLAuthorizationStatus
+    private(set) var authorization: CLAuthorizationStatus = .notDetermined
     private(set) var mode: Mode = .off
     private(set) var lastFix: LocationFix?
     private var continuations: [UUID: AsyncStream<LocationFix>.Continuation] = [:]
 
     override init() {
-        authorization = manager.authorizationStatus
         super.init()
+        authorization = manager.authorizationStatus
         manager.delegate = self
         manager.allowsBackgroundLocationUpdates = true
         manager.pausesLocationUpdatesAutomatically = false
