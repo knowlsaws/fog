@@ -3,7 +3,7 @@ import Foundation
 /// 分潮の定義。天文引数 V = a·T + b·s + c·h + d·p + e·N + f·p' + 位相（Schureman の表記、T = 平均太陽の時角）。
 /// 複合分潮（浅海分潮など）は基本分潮の整数結合で表し、V は和、ノード因子 f は積、u は和にする。
 struct ConstituentDefinition {
-    enum Nodal {
+    enum Nodal: Hashable {
         case none, m2, k1, o1, k2, j1, oo1, mf, mm, m1, l2, m3
     }
     enum Kind {
@@ -17,6 +17,32 @@ struct ConstituentDefinition {
 }
 
 enum ConstituentTable {
+    /// 複合分潮を基本分潮に展開した形（係数の和、位相の和、ノード因子の種類と重複度）
+    struct Flattened {
+        var coefficients: [Double]
+        var phase: Double
+        var nodal: [(ConstituentDefinition.Nodal, Int)]
+    }
+
+    static func flatten(_ name: String, multiplier: Int = 1) -> Flattened? {
+        guard let def = definitions[canonicalName(name)] else { return nil }
+        switch def.kind {
+        case .basic(let c, let ph, let nodal):
+            var out = Flattened(coefficients: c.map { $0 * Double(multiplier) }, phase: ph * Double(multiplier), nodal: [])
+            if nodal != .none { out.nodal = [(nodal, multiplier)] }
+            return out
+        case .compound(let parts):
+            var out = Flattened(coefficients: [Double](repeating: 0, count: 6), phase: 0, nodal: [])
+            for (n, k) in parts {
+                guard let sub = flatten(n, multiplier: k * multiplier) else { return nil }
+                for i in 0..<6 { out.coefficients[i] += sub.coefficients[i] }
+                out.phase += sub.phase
+                out.nodal += sub.nodal
+            }
+            return out
+        }
+    }
+
     /// 名前のゆらぎ（気象庁の表記、ギリシャ文字、英字）を正規化する。
     static func canonicalName(_ raw: String) -> String {
         let s = raw.trimmingCharacters(in: .whitespaces)

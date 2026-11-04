@@ -54,21 +54,31 @@ public struct TideExtreme: Hashable, Sendable {
 public struct TideEngine: Sendable {
     public var station: TideStation
 
-    /// 事前に解決した分潮（定義にないものは無視して警告対象にする）。speciesShift は m·L（度）
-    private let resolved: [(name: String, amplitude: Double, lagRad: Double, speciesShiftDeg: Double)]
+    /// 初期化時に展開した分潮：係数ベクトル（T, s, h, p, N, p'）と位相、ノード因子の種類と重複度、振幅、遅角、m·L
+    private struct Resolved {
+        var coefficients: [Double]
+        var phase: Double
+        var nodal: [(ConstituentDefinition.Nodal, Int)]
+        var amplitude: Double
+        var lagRad: Double
+        var speciesShiftDeg: Double
+    }
+    private let resolved: [Resolved]
     public let unknownConstituents: [String]
 
     public init(station: TideStation) {
         self.station = station
-        var ok: [(String, Double, Double, Double)] = []
+        var ok: [Resolved] = []
         var unknown: [String] = []
         for c in station.constituents {
             let name = ConstituentTable.canonicalName(c.name)
-            if let species = ConstituentTable.species(of: name) {
-                ok.append((name, c.amplitudeCm, Angle.rad(c.phaseLagDeg), species * station.lagLongitudeDeg))
-            } else {
+            guard let flat = ConstituentTable.flatten(name) else {
                 unknown.append(c.name)
+                continue
             }
+            ok.append(Resolved(coefficients: flat.coefficients, phase: flat.phase, nodal: flat.nodal,
+                               amplitude: c.amplitudeCm, lagRad: Angle.rad(c.phaseLagDeg),
+                               speciesShiftDeg: flat.coefficients[0] * station.lagLongitudeDeg))
         }
         resolved = ok
         unknownConstituents = unknown
@@ -77,10 +87,26 @@ public struct TideEngine: Sendable {
     /// 指定時刻の推算潮位（cm、潮位表基準面上）。
     public func level(at date: Date) -> Double {
         let args = AstronomicalArguments(at: date)
+        let vector = args.vector
+        // ノード因子は種類ごとに 1 回だけ
+        var nodalCache: [ConstituentDefinition.Nodal: (f: Double, u: Double)] = [:]
+        func nodal(_ kind: ConstituentDefinition.Nodal) -> (f: Double, u: Double) {
+            if let v = nodalCache[kind] { return v }
+            let v = args.nodalFactors(kind)
+            nodalCache[kind] = v
+            return v
+        }
         var sum = station.meanSeaLevelCm
         for c in resolved {
-            guard let a = args.argument(for: c.name) else { continue }
-            sum += a.f * c.amplitude * cos(Angle.rad(a.V + c.speciesShiftDeg + a.u) - c.lagRad)
+            var v = c.phase + c.speciesShiftDeg
+            for i in 0..<6 { v += c.coefficients[i] * vector[i] }
+            var f = 1.0, u = 0.0
+            for (kind, k) in c.nodal {
+                let n = nodal(kind)
+                f *= pow(n.f, Double(abs(k)))
+                u += n.u * Double(k)
+            }
+            sum += f * c.amplitude * cos(Angle.rad(v + u) - c.lagRad)
         }
         return sum
     }
