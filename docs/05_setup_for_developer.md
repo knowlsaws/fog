@@ -26,7 +26,8 @@ developer.apple.com → Certificates, Identifiers & Profiles
    - `{prefix}.fog`（App）: Capabilities で **WeatherKit**, **iCloud**（CloudKit, コンテナ `iCloud.{prefix}.fog` を新規作成）, **App Groups**（`group.{prefix}.fog` を新規作成）, **Push Notifications** を有効化
    - `{prefix}.fog.widgets`（App）: **App Groups**（同じグループ）
 3. **Services → WeatherKit** を有効化（App ID 側だけでなく、Services タブでも ON にする。反映に最大30分）
-4. 証明書・プロファイルは作らなくてよい（CI が API キーで自動生成する）
+4. 証明書・プロファイルは作らなくてよい（CI が API キーで Apple Distribution 証明書を1枚作り、`scripts/ci/signing/` に暗号化して保存して使い回す。プロファイルは毎回作り直す）
+5. `testflight` が「証明書の上限に達しています」で止まったら、Actions → `signing-admin` → Run workflow（`list`）で一覧を見て、不要な DISTRIBUTION 証明書の ID を `revoke` で失効させてから、失敗した `testflight` を Re-run する
 
 ## 3. App Store Connect（10分）
 

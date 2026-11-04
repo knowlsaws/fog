@@ -1,0 +1,38 @@
+name: signing-admin
+
+# 署名証明書の管理（Mac なしで iPad から）。Actions → signing-admin → Run workflow。
+#   list   : チームの証明書を一覧表示する
+#   revoke : certificate_id の証明書を失効させる（testflight が「上限に達した」で止まったときに使う）
+# 失効させた証明書を含むプロファイルは無効になるが、testflight はプロファイルを毎回作り直すので問題ない。
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "list または revoke"
+        required: true
+        default: list
+        type: choice
+        options: [list, revoke]
+      certificate_id:
+        description: "revoke するときの証明書 ID（list で表示される）"
+        required: false
+        default: ""
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          if [ "${{ inputs.action }}" = "revoke" ]; then
+            python3 -I scripts/ci/asc_signing.py revoke-cert --id "${{ inputs.certificate_id }}"
+          else
+            python3 -I scripts/ci/asc_signing.py list-certs
+          fi

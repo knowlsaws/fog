@@ -1,0 +1,7 @@
+{
+  "certificateId": "ZWWRTUFTZH",
+  "serialNumber": "740121D8F1C498E3B55CDA4843EAF9C3",
+  "notAfter": "Nov  4 07:07:02 2027 GMT",
+  "createdAt": "2026-11-04T07:17:03+00:00",
+  "note": "CI が自動生成した Apple Distribution 証明書。p12 は ASC_PRIVATE_KEY の SHA-256 で暗号化。"
+}
