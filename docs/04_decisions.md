@@ -3,6 +3,15 @@
 新しい決定は上に追加する。形式：日付 / 決定 / 理由 / 影響範囲。
 Claude Code が設計判断で迷ったら、まずここに「提案」として書き、PR で問う。
 
+## 2026-11-04 L16 実機総合検証（開発者）への引き渡し
+
+| 決定 | 理由 | 影響 |
+| --- | --- | --- |
+| L1〜L15 は CI 緑を確認して Claude Code がマージした（開発者の指示）。実機確認は `docs/06_device_verification.md` にまとめ、ループごとではなく一括で行う | 開発者が Mac を持たず、TestFlight での確認は丸一日の釣行を含むため、ループごとに待つと止まる | 状態表は `review` のまま。確認できた項目から `done` にする。問題は `feedback` Issue |
+| 初回起動のダミー釣行（函館港・アイナメ）のシードを外す。すでに入っている端末では起動時に 1 回だけそのダミーを削除する | L1 の確認用だった（決定ログ参照）。実データと混ざると分析が歪む | 魚種カタログのマージは残す（`SampleSeeder` → `CatalogSeeder`） |
+| 魚種判定モデル（`FishClassifier.mlmodelc`）は未同梱で出荷する。候補なしのとき撮影は魚種空欄で成立する | 学習用写真が開発者の手元にしかない。完全ローカル原則で写真はリポジトリに置かない | `scripts/train_classifier/README.md` の手順で CI（macOS）で学習し、生成物を `App/Resources/Models/` に置くと有効になる |
+| `testflight` ワークフローは `concurrency` で直列化する | エクスポート時に Xcode が App Store Connect の最新ビルド番号 +1 を自動採番する（`manageAppVersionAndBuildNumber`）。main への push が続くと同じ番号で 2 本上がり、後の方が Redundant Binary Upload で失敗した（run 20, 26） | 後の run は前の run の完了を待ってから走る。失敗した run は Re-run すれば次の番号で上がる |
+
 ## 2026-11-04 L14 ウィジェット・ロック画面・通知
 
 | 決定 | 理由 | 影響 |
