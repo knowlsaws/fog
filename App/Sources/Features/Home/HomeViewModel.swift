@@ -212,7 +212,8 @@ final class HomeViewModel {
 
         // ウィジェット（15 分更新）とピーク通知（§8）
         let widgetEvents = ScoreEvents.upcoming(from: now, count: 16, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
-        WidgetSync.publish(spotName: spot?.name ?? "", timeline: timeline, tide: tide, events: widgetEvents, isRecording: isRecording, tackle: services.capture.currentTackle)
+        WidgetSync.publish(spotName: spot?.name ?? "現在地", timeline: timeline, tide: tide, events: widgetEvents, isRecording: isRecording, tackle: services.capture.currentTackle,
+                           envAt: { env.snapshot(at: $0, coordinate: coordinate) })
         PeakNotifier.schedule(points: timeline, spot: spot, now: now, timeZone: timeZone)
     }
 

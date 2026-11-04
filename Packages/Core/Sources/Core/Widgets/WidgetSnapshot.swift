@@ -9,15 +9,23 @@ public struct WidgetSnapshot: Codable, Hashable, Sendable {
         /// 潮が上げているか（nil は潮止まりか不明）
         public var tideRising: Bool?
         public var tideLevelCm: Double?
-        public init(at: Date, score: Int, tideRising: Bool? = nil, tideLevelCm: Double? = nil) {
+        public var airTemperatureC: Double?
+        public var windSpeedMS: Double?
+        public var windDirectionDeg: Double?
+        public var conditionCode: String?
+        public init(at: Date, score: Int, tideRising: Bool? = nil, tideLevelCm: Double? = nil,
+                    airTemperatureC: Double? = nil, windSpeedMS: Double? = nil, windDirectionDeg: Double? = nil, conditionCode: String? = nil) {
             self.at = at; self.score = score; self.tideRising = tideRising; self.tideLevelCm = tideLevelCm
+            self.airTemperatureC = airTemperatureC; self.windSpeedMS = windSpeedMS; self.windDirectionDeg = windDirectionDeg; self.conditionCode = conditionCode
         }
     }
 
     public struct Event: Codable, Hashable, Sendable {
         public var at: Date
         public var label: String
-        public init(at: Date, label: String) { self.at = at; self.label = label }
+        /// `ScoreEvent.Kind` の rawValue（highTide / lowTide / dawn / dusk / windUp / windDown / sunrise / sunset）
+        public var kind: String?
+        public init(at: Date, label: String, kind: String? = nil) { self.at = at; self.label = label; self.kind = kind }
     }
 
     public var generatedAt: Date
@@ -47,6 +55,11 @@ public struct WidgetSnapshot: Codable, Hashable, Sendable {
 
     public func nextEvent(after date: Date) -> Event? {
         events.first { $0.at > date }
+    }
+
+    /// 次の満干・次のマズメ（種類で絞る）
+    public func nextEvent(after date: Date, kinds: Set<String>) -> Event? {
+        events.first { $0.at > date && $0.kind.map { kinds.contains($0) } == true }
     }
 
     /// `from` から `step` 刻みで `count` 個。ウィジェットのタイムライン用。
