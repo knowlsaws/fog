@@ -7,7 +7,7 @@ import Core
 
 private enum WColor {
     static let background = Color(red: 0.043, green: 0.043, blue: 0.047)
-    static let accent = Color(red: 1.0, green: 0.478, blue: 0.102)
+    static let accent = Color(red: 0.45, green: 0.62, blue: 0.47)   // テーマ色（緑）
     static let secondary = Color(red: 0.45, green: 0.62, blue: 0.47)
     static let textSecondary = Color.white.opacity(0.7)
     static let textTertiary = Color.white.opacity(0.4)
