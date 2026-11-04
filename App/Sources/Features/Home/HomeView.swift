@@ -18,8 +18,8 @@ struct HomeView: View {
                 header.frame(height: geo.size.height * 0.08)
                 scoreArea.frame(height: geo.size.height * 0.20)
                 chipsRow.frame(height: geo.size.height * 0.12)
-                eventsRow.frame(height: geo.size.height * 0.065)
-                ForecastChart(model: model).frame(height: geo.size.height * 0.52)
+                ForecastChart(model: model).frame(height: geo.size.height * 0.585)
+                    .padding(.top, DS.Spacing.s)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, DS.Spacing.l)
@@ -35,6 +35,11 @@ struct HomeView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in Task { await model.refresh() } }
+        .onReceive(NotificationCenter.default.publisher(for: .fogHomeReselected)) { _ in
+            // ホームを表示中にホームのタブを押したら今日に戻す
+            withAnimation(.easeInOut(duration: 0.2)) { model.dayOffset = 0 }
+            Task { await model.refresh() }
+        }
         .sheet(isPresented: $showBreakdown) { BreakdownSheet(result: model.score).presentationDetents([.medium]) }
         .sheet(isPresented: $showSpots) { SpotSwitchSheet(model: model) { showSpots = false }.presentationDetents([.large]) }
         .sheet(item: $chipDetail) { ChipDetailSheet(chip: $0, model: model).presentationDetents([.medium]) }
@@ -286,6 +291,15 @@ struct ForecastChart: View {
         }
     }
 
+    /// 「2026/11/04(水)」
+    static func dayLabel(_ date: Date, timeZone: TimeZone) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ja_JP")
+        f.timeZone = timeZone
+        f.dateFormat = "yyyy/MM/dd(E)"
+        return f.string(from: date)
+    }
+
     private func step(_ d: Int) {
         let next = model.dayOffset + d
         guard model.dayOffsetRange.contains(next) else { return }
@@ -298,7 +312,7 @@ struct ForecastChart: View {
                 .buttonStyle(.plain)
             Spacer()
             HStack(spacing: 6) {
-                Text(model.dayStart, format: .dateTime.month(.defaultDigits).day().weekday(.abbreviated)).font(DS.Font.number(14)).foregroundStyle(DS.Color.textPrimary)
+                Text(Self.dayLabel(model.dayStart, timeZone: model.timeZone)).font(DS.Font.number(14)).foregroundStyle(DS.Color.textPrimary)
                 Text(model.dayOffset == 0 ? "今日" : (model.dayOffset == 1 ? "明日" : (model.dayOffset == -1 ? "昨日" : ""))).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
             }
             Spacer()

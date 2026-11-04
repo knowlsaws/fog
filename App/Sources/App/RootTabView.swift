@@ -57,7 +57,10 @@ struct RootTabView: View {
     }
 
     private func tabButton(_ tab: Tab, system: String) -> some View {
-        Button { selected = tab } label: {
+        Button {
+            if selected == tab { NotificationCenter.default.post(name: .fogHomeReselected, object: tab == .home ? tab : nil) }
+            selected = tab
+        } label: {
             Image(systemName: selected == tab ? system + ".fill" : system)
                 .font(.system(size: 22, weight: .regular))
                 .foregroundStyle(selected == tab ? DS.Color.textPrimary : DS.Color.textTertiary)
@@ -82,3 +85,7 @@ struct RootTabView: View {
     }
 }
 
+extension Notification.Name {
+    /// 表示中のタブをもう一度押したとき（ホームは今日に戻る）
+    static let fogHomeReselected = Notification.Name("fog.tabReselected")
+}
