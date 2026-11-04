@@ -21,7 +21,7 @@
 | L10 | 撮影画面の仕上げ | pending | | |
 | L11 | ログ画面 | pending | | |
 | L12 | 図鑑画面 | pending | | |
-| L13 | 釣り場画面 | pending | | |
+| L13 | 釣り場画面 | in_progress | | ブランチ `loop/L13-spots` |
 | L14 | ウィジェット・ロック画面・通知 | pending | | |
 | L15 | 設定・データ管理・iCloud | pending | | |
 | L16 | 実機総合検証とバッテリー | pending | | |
