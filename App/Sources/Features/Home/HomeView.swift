@@ -598,11 +598,7 @@ struct ForecastChart: View {
         return tideBand.lowerBound + t * (tideBand.upperBound - tideBand.lowerBound)
     }
 
-    private var tideRange: ClosedRange<Double> {
-        let levels = model.tideCurve.map(\.levelCm)
-        guard let lo = levels.min(), let hi = levels.max(), hi > lo else { return 0...200 }
-        return lo...hi
-    }
+    private var tideRange: ClosedRange<Double> { model.tideRangeCm }
 
     /// 夜の区間（日の入〜翌日の出）。表示中の日に重なるものだけ
     private var dayShading: [(Date, Date)] {
@@ -624,9 +620,17 @@ struct ForecastChart: View {
 /// グラフをタップしたときの詳細：その時刻の数値と、その日の時刻一覧（マズメ・日の出入・月の出入・満干）。
 struct DayDetailSheet: View {
     let model: HomeViewModel
-    let at: Date
+    let initial: Date
     let twilights: [(String, Date, Date)]
     @Environment(AppServices.self) private var services
+    @State private var at: Date = .now
+
+    init(model: HomeViewModel, at: Date, twilights: [(String, Date, Date)]) {
+        self.model = model
+        self.initial = at
+        self.twilights = twilights
+        _at = State(initialValue: at)
+    }
 
     var body: some View {
         let env = services.environment.snapshot(at: at, coordinate: model.coordinate)
@@ -638,6 +642,9 @@ struct DayDetailSheet: View {
                 Spacer()
                 if let score { Text("\(score)").font(DS.Font.score(32)).foregroundStyle(DS.Color.accent) }
             }
+            // 時刻の横棒：タップかドラッグで 15 分刻みに動かす（グラフが小さくて狙いにくいため）
+            TimeScrubber(date: $at, dayStart: model.dayStart, dayEnd: model.dayEnd)
+                .frame(height: 44)
             VStack(spacing: DS.Spacing.s) {
                 row("潮位", env.tideLevelCm.map { "\(Int($0.rounded())) cm " + (((env.tideRateCmPerHour ?? 0) > 2) ? "上げ" : ((env.tideRateCmPerHour ?? 0) < -2 ? "下げ" : "潮止まり")) }, color: DS.Color.sea)
                 row("潮", env.tideName, color: DS.Color.sea)
@@ -669,6 +676,41 @@ struct DayDetailSheet: View {
             Text(label).font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
             Spacer()
             Text(value ?? "—").font(DS.Font.number(15)).foregroundStyle(value == nil ? DS.Color.textTertiary : color)
+        }
+    }
+}
+
+/// 1 日の時刻を選ぶ横棒。タップで移動、ドラッグで連続して動く。15 分刻み
+struct TimeScrubber: View {
+    @Binding var date: Date
+    let dayStart: Date
+    let dayEnd: Date
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let frac = CGFloat(date.timeIntervalSince(dayStart) / dayEnd.timeIntervalSince(dayStart))
+            ZStack(alignment: .leading) {
+                Capsule().fill(DS.Color.surfaceRaised).frame(height: 8).frame(maxHeight: .infinity, alignment: .center)
+                Capsule().fill(DS.Color.accent).frame(width: max(0, min(w, w * frac)), height: 8).frame(maxHeight: .infinity, alignment: .center)
+                Circle().fill(DS.Color.textPrimary).frame(width: 22, height: 22)
+                    .shadow(color: .black.opacity(0.4), radius: 3)
+                    .offset(x: max(0, min(w - 22, w * frac - 11)))
+                    .frame(maxHeight: .infinity, alignment: .center)
+                HStack {
+                    ForEach([0, 6, 12, 18, 24], id: \.self) { h in
+                        Text("\(h)").font(DS.Font.number(9)).foregroundStyle(DS.Color.textTertiary)
+                        if h < 24 { Spacer() }
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .bottom)
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                let f = max(0, min(1, v.location.x / w))
+                let seconds = (Double(f) * dayEnd.timeIntervalSince(dayStart) / 900).rounded() * 900
+                date = dayStart.addingTimeInterval(min(seconds, dayEnd.timeIntervalSince(dayStart) - 900))
+            })
         }
     }
 }

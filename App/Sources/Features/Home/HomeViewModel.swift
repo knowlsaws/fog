@@ -44,7 +44,7 @@ final class HomeViewModel {
     private(set) var rangeEnd: Date = .now
     var scrollTarget: Date?
     /// グラフに出している日（0 = 今日、-1 = 昨日、+n = n 日後）
-    var dayOffset: Int = 0 { didSet { updateDay() } }
+    var dayOffset: Int = 0 { didSet { updateDay(); updateWeekOutlook() } }
     private(set) var dayStart: Date = .now
     private(set) var dayEnd: Date = .now
     private(set) var dayTimeline: [ScorePoint] = []
@@ -73,6 +73,49 @@ final class HomeViewModel {
     private var services: AppServices?
     private let cache = AnalysisCache()
     private var timelineKey = ""
+    private var dayCache: [Int: DayData] = [:]
+    private var calc: DayCalculator?
+    /// 右軸の目盛りに使う潮位の範囲（1 か月）
+    private(set) var tideRangeCm: ClosedRange<Double> = 0...200
+
+    struct DayData { let timeline: [ScorePoint]; let tide: [TidePoint]; let extremes: [TideExtreme] }
+
+    /// 1 日分の推移・潮位曲線・満干を計算する（純粋な計算。約 50 ms）
+    struct DayCalculator {
+        let engine: ScoreEngine
+        let builder: EnvSnapshotBuilder
+        let inputs: EnvSnapshotBuilder.Inputs
+        let tide: TideEngine?
+        let coordinate: Coordinate
+        let timeZone: TimeZone
+        let horizon: Date?
+
+        func compute(from start: Date) -> DayData {
+            let end = start.addingTimeInterval(86_400)
+            let extremes = tide?.extremes(from: start.addingTimeInterval(-6 * 3600), to: end.addingTimeInterval(6 * 3600)) ?? []
+            let timeline = ScoreTimeline.compute(engine: engine, coordinate: coordinate, from: start, to: end, stepMinutes: 15, timeZone: timeZone) { t in
+                var e = builder.build(at: t, coordinate: coordinate, inputs: inputs, tide: tide, extremes: extremes)
+                if let h = horizon, t > h { e.isForecast = true }
+                return e
+            }
+            let curve = stride(from: 0, through: 86_400, by: 600).compactMap { offset -> TidePoint? in
+                let t = start.addingTimeInterval(offset)
+                return tide.map { TidePoint(at: t, levelCm: $0.level(at: t)) }
+            }
+            return DayData(timeline: timeline, tide: curve, extremes: extremes.filter { $0.at >= start && $0.at <= end })
+        }
+    }
+
+    /// オフセット日のデータ（キャッシュ）
+    private func dayData(_ offset: Int) -> DayData {
+        if let d = dayCache[offset] { return d }
+        guard let calc else { return DayData(timeline: [], tide: [], extremes: []) }
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
+        let start = cal.startOfDay(for: now).addingTimeInterval(Double(offset) * 86_400)
+        let d = calc.compute(from: start)
+        dayCache[offset] = d
+        return d
+    }
     let timeZone = TimeZone(identifier: "Asia/Tokyo") ?? .current
 
     func attach(_ services: AppServices) {
@@ -130,37 +173,36 @@ final class HomeViewModel {
 
         chips = makeChips(current, fetchFailed: env.lastError != nil)
 
-        // 推移：前日の 0 時から、予報のある範囲か 10 日先の遠い方まで 15 分刻み（潮・天文は無期限に計算できる）。
-        // 計算が重いので、場所・予報・保存データ・日付が変わったときだけ作り直す（30 秒ごとの更新では「今」の線だけ動く）
+        // 推移：前日の 0 時から 31 日先まで（潮・天文は無期限、天気は約 10 日先まで。その先は線を薄く）。
+        // 1 日分ずつ必要になったときに計算してキャッシュする（31 日分を一度に計算すると 1.5 秒かかる）。
+        // 場所・予報・保存データ・日付が変わったらキャッシュを捨てる
         var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
         let start = cal.startOfDay(for: now).addingTimeInterval(-86_400)
         forecastHorizon = env.forecastHorizon(for: coordinate)
-        let end = max(forecastHorizon ?? start, start.addingTimeInterval(11 * 86_400))
+        let end = start.addingTimeInterval(32 * 86_400)
         let entry = env.cache.entry(for: coordinate)
         let key = [String(format: "%.4f,%.4f", coordinate.latitude, coordinate.longitude), "\(entry?.weatherFetchedAt?.timeIntervalSince1970 ?? 0)",
-                   "\(entry?.marineFetchedAt?.timeIntervalSince1970 ?? 0)", "\(store.revision)", "\(start.timeIntervalSince1970)", "\(end.timeIntervalSince1970)"].joined(separator: "|")
+                   "\(entry?.marineFetchedAt?.timeIntervalSince1970 ?? 0)", "\(store.revision)", "\(start.timeIntervalSince1970)"].joined(separator: "|")
         let station = env.tideStation(near: coordinate)
         let tide = station.map { TideEngine(station: $0) }
         let inputs = env.inputs(for: coordinate)
         if key != timelineKey {
             timelineKey = key
             rangeStart = start; rangeEnd = end
-            tideExtremes = tide?.extremes(from: start, to: end) ?? []
-            let builder = env.builder(for: coordinate)
-            let horizon = forecastHorizon
-            timeline = ScoreTimeline.compute(engine: engine, coordinate: coordinate, from: start, to: end, stepMinutes: 15, timeZone: timeZone) { t in
-                var e = builder.build(at: t, coordinate: coordinate, inputs: inputs, tide: tide, extremes: tideExtremes)
-                if let h = horizon, t > h { e.isForecast = true }
-                return e
+            dayCache = [:]
+            calc = DayCalculator(engine: engine, builder: env.builder(for: coordinate), inputs: inputs, tide: tide, coordinate: coordinate, timeZone: timeZone, horizon: forecastHorizon)
+            // 右軸の目盛り用：1 か月の潮位の範囲（1 時間おき）
+            if let tide {
+                let levels = stride(from: 0, to: end.timeIntervalSince(start), by: 3600).map { tide.level(at: start.addingTimeInterval($0)) }
+                if let lo = levels.min(), let hi = levels.max(), hi > lo { tideRangeCm = lo...hi }
             }
-            tideCurve = stride(from: 0, through: end.timeIntervalSince(start), by: 600).compactMap { offset in
-                let t = start.addingTimeInterval(offset)
-                return tide.map { TidePoint(at: t, levelCm: $0.level(at: t)) }
-            }
-            sunTimesByDay = stride(from: 0, through: end.timeIntervalSince(start), by: 86_400).map { SunCalculator.times(on: start.addingTimeInterval($0), at: coordinate, timeZone: timeZone) }
         }
         updateDay()
         updateWeekOutlook()
+        let todayData = dayData(0)
+        tideExtremes = tide?.extremes(from: now, to: now.addingTimeInterval(3 * 86_400)) ?? []
+        timeline = todayData.timeline + dayData(1).timeline + dayData(2).timeline
+        sunTimesByDay = daySun.map { [$0] } ?? []
         seaSurfaceTempC = current.seaSurfaceTempC
         nowTideLevelCm = current.tideLevelCm
         nowTideRateCmPerHour = current.tideRateCmPerHour
@@ -196,9 +238,10 @@ final class HomeViewModel {
         let offset = min(max(dayOffset, dayOffsetRange.lowerBound), dayOffsetRange.upperBound)
         dayStart = today.addingTimeInterval(Double(offset) * 86_400)
         dayEnd = dayStart.addingTimeInterval(86_400)
-        dayTimeline = timeline.filter { $0.at >= dayStart && $0.at <= dayEnd }
-        dayTide = tideCurve.filter { $0.at >= dayStart && $0.at <= dayEnd }
-        dayExtremes = tideExtremes.filter { $0.at >= dayStart && $0.at <= dayEnd }
+        let data = dayData(offset)
+        dayTimeline = data.timeline
+        dayTide = data.tide
+        dayExtremes = data.extremes
         if let services {
             dayDetail = stride(from: 0, to: 24, by: 3).map { h in services.environment.snapshot(at: dayStart.addingTimeInterval(Double(h) * 3600), coordinate: coordinate) }
         }
@@ -207,17 +250,17 @@ final class HomeViewModel {
         dayMoon = MoonCalculator.times(on: noon, at: coordinate, timeZone: timeZone)
     }
 
-    /// 今日から 7 日分：各日の最高釣れ率と昼 12 時の天気
+    /// 週間の見通し：表示中の日の前日から 7 日分（表示中の日に合わせて動く）。各日の最高釣れ率と昼 12 時の天気
     private func updateWeekOutlook() {
+        let range = dayOffsetRange
+        var first = max(range.lowerBound, dayOffset - 1)
+        if first + 6 > range.upperBound { first = max(range.lowerBound, range.upperBound - 6) }
         var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
         let today = cal.startOfDay(for: now)
         var out: [DayOutlook] = []
-        for offset in 0..<7 {
+        for offset in first...min(range.upperBound, first + 6) {
             let start = today.addingTimeInterval(Double(offset) * 86_400)
-            let end = start.addingTimeInterval(86_400)
-            guard start < rangeEnd else { break }
-            let points = timeline.filter { $0.at >= start && $0.at < end }
-            guard let best = points.map(\.score).max() else { continue }
+            guard let best = dayData(offset).timeline.map(\.score).max() else { continue }
             let noon = start.addingTimeInterval(12 * 3600)
             let cond = services.map { $0.environment.snapshot(at: noon, coordinate: coordinate).conditionCode } ?? nil
             let beyond = forecastHorizon.map { noon > $0 } ?? true
