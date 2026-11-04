@@ -654,9 +654,6 @@ struct DayDetailSheet: View {
                 Spacer()
                 if let score { Text("\(score)").font(DS.Font.score(32)).foregroundStyle(DS.Color.accent) }
             }
-            // 時刻の横棒：タップかドラッグで 15 分刻みに動かす（グラフが小さくて狙いにくいため）
-            TimeScrubber(date: $at, dayStart: model.dayStart, dayEnd: model.dayEnd)
-                .frame(height: 44)
             VStack(spacing: DS.Spacing.s) {
                 row("潮位", env.tideLevelCm.map { "\(Int($0.rounded())) cm " + (((env.tideRateCmPerHour ?? 0) > 2) ? "上げ" : ((env.tideRateCmPerHour ?? 0) < -2 ? "下げ" : "潮止まり")) }, color: DS.Color.sea)
                 row("潮", env.tideName, color: DS.Color.sea)
@@ -675,6 +672,9 @@ struct DayDetailSheet: View {
                 ForEach(model.dayExtremes, id: \.at) { e in row(e.kind == .high ? "満潮" : "干潮", time(e.at) + "  \(Int(e.levelCm.rounded())) cm", color: DS.Color.sea) }
             }
             Spacer()
+            // 時刻の横棒はシートの一番下（親指で届く位置）。タップかドラッグで 15 分刻みに動かす
+            TimeScrubber(date: $at, dayStart: model.dayStart, dayEnd: model.dayEnd)
+                .frame(height: 44)
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
