@@ -18,15 +18,16 @@ public struct TideStation: Codable, Identifiable, Hashable, Sendable {
     /// Z0（潮位表基準面から平均水面までの高さ、cm）
     public var meanSeaLevelCm: Double
     public var constituents: [TidalConstituent]
-    /// 遅角の基準となる時差（秒）。気象庁の分潮一覧表は「現地子午線基準」なので経度 × 240 秒（135°E なら +9h）
-    public var utcOffsetSeconds: Int
+    /// 遅角 κ の基準子午線（東経、度）。気象庁の分潮一覧表は「現地子午線基準」なので地点の経度。0 ならグリニッジ基準（G）。
+    /// 現地の平衡潮引数は V_G + 種別 × 経度 になる（潮汐ポテンシャルの位相が m·(T_G + L) で決まるため）。
+    public var lagLongitudeDeg: Double
 
-    public init(id: String, name: String, coordinate: Coordinate, meanSeaLevelCm: Double, constituents: [TidalConstituent], utcOffsetSeconds: Int = 9 * 3600) {
+    public init(id: String, name: String, coordinate: Coordinate, meanSeaLevelCm: Double, constituents: [TidalConstituent], lagLongitudeDeg: Double = 0) {
         self.id = id; self.name = name; self.coordinate = coordinate; self.meanSeaLevelCm = meanSeaLevelCm
-        self.constituents = constituents; self.utcOffsetSeconds = utcOffsetSeconds
+        self.constituents = constituents; self.lagLongitudeDeg = lagLongitudeDeg
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, coordinate, meanSeaLevelCm, constituents, utcOffsetSeconds }
+    enum CodingKeys: String, CodingKey { case id, name, coordinate, meanSeaLevelCm, constituents, lagLongitudeDeg }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -35,7 +36,7 @@ public struct TideStation: Codable, Identifiable, Hashable, Sendable {
         coordinate = try c.decode(Coordinate.self, forKey: .coordinate)
         meanSeaLevelCm = try c.decode(Double.self, forKey: .meanSeaLevelCm)
         constituents = try c.decode([TidalConstituent].self, forKey: .constituents)
-        utcOffsetSeconds = try c.decodeIfPresent(Int.self, forKey: .utcOffsetSeconds) ?? 9 * 3600
+        lagLongitudeDeg = try c.decodeIfPresent(Double.self, forKey: .lagLongitudeDeg) ?? 0
     }
 }
 
@@ -47,23 +48,24 @@ public struct TideExtreme: Hashable, Sendable {
     public init(kind: Kind, at: Date, levelCm: Double) { self.kind = kind; self.at = at; self.levelCm = levelCm }
 }
 
-/// 調和推算エンジン。η(t) = Z0 + Σ f_i H_i cos(V_i(t) + u_i − κ_i)
-/// V は「地方標準時を UT とみなした時刻」で評価する（κ が地方時基準のため）。
+/// 調和推算エンジン。η(t) = Z0 + Σ f_i H_i cos(V_i(t) + m_i·L + u_i − κ_i)
+/// V はグリニッジ（UT）で評価し、κ の基準子午線 L（東経）と分潮の種別 m で現地の平衡潮引数に直す。
+/// 函館・東京の気象庁潮位表との比較で RMS 1〜2 cm（検証: TideEngineTests）。
 public struct TideEngine: Sendable {
     public var station: TideStation
 
-    /// 事前に解決した分潮（定義にないものは無視して警告対象にする）
-    private let resolved: [(name: String, amplitude: Double, lagRad: Double)]
+    /// 事前に解決した分潮（定義にないものは無視して警告対象にする）。speciesShift は m·L（度）
+    private let resolved: [(name: String, amplitude: Double, lagRad: Double, speciesShiftDeg: Double)]
     public let unknownConstituents: [String]
 
     public init(station: TideStation) {
         self.station = station
-        var ok: [(String, Double, Double)] = []
+        var ok: [(String, Double, Double, Double)] = []
         var unknown: [String] = []
         for c in station.constituents {
             let name = ConstituentTable.canonicalName(c.name)
-            if ConstituentTable.definitions[name] != nil {
-                ok.append((name, c.amplitudeCm, Angle.rad(c.phaseLagDeg)))
+            if let species = ConstituentTable.species(of: name) {
+                ok.append((name, c.amplitudeCm, Angle.rad(c.phaseLagDeg), species * station.lagLongitudeDeg))
             } else {
                 unknown.append(c.name)
             }
@@ -72,15 +74,13 @@ public struct TideEngine: Sendable {
         unknownConstituents = unknown
     }
 
-    private func shifted(_ date: Date) -> Date { date.addingTimeInterval(Double(station.utcOffsetSeconds)) }
-
     /// 指定時刻の推算潮位（cm、潮位表基準面上）。
     public func level(at date: Date) -> Double {
-        let args = AstronomicalArguments(at: shifted(date))
+        let args = AstronomicalArguments(at: date)
         var sum = station.meanSeaLevelCm
         for c in resolved {
             guard let a = args.argument(for: c.name) else { continue }
-            sum += a.f * c.amplitude * cos(Angle.rad(a.V + a.u) - c.lagRad)
+            sum += a.f * c.amplitude * cos(Angle.rad(a.V + c.speciesShiftDeg + a.u) - c.lagRad)
         }
         return sum
     }

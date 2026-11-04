@@ -10,7 +10,7 @@ struct AstronomicalArguments {
     var N: Double
     var pp: Double
 
-    /// `date` を UTC として評価する。遅角が地方時基準なら呼び出し側で時差ぶんずらした Date を渡す。
+    /// `date`（UTC）で評価したグリニッジの引数。現地子午線基準の遅角には `TideEngine` が m·L を加える。
     init(at date: Date) {
         let jd = JulianDay.from(date)
         let t = JulianDay.centuries(jd)

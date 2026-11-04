@@ -124,6 +124,9 @@ enum ConstituentTable {
         return zip(coeffs, rates).reduce(0) { $0 + $1.0 * $1.1 }
     }
 
+    /// 種別（T の係数：長周期 0、日周 1、半日周 2、…）
+    static func species(of name: String) -> Double? { coefficients(of: name)?[0] }
+
     static func coefficients(of name: String) -> [Double]? {
         guard let def = definitions[canonicalName(name)] else { return nil }
         switch def.kind {

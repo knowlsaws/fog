@@ -70,8 +70,9 @@ public enum JMATideTableParser {
             for k in 0..<4 {
                 let t = field(start + k * 7, 4).trimmingCharacters(in: .whitespaces)
                 let l = field(start + k * 7 + 4, 3).trimmingCharacters(in: .whitespaces)
-                guard t != "9999", t.count == 4, let hh = Int(t.prefix(2)), let mi = Int(t.suffix(2)), let level = Double(l) else { continue }
-                out.append((DateComponents(hour: hh, minute: mi), level))
+                // 時刻は "0249" または " 249" のように先頭の 0 が空白のことがある
+                guard t != "9999", let hhmm = Int(t), hhmm >= 0, hhmm < 2400, let level = Double(l) else { continue }
+                out.append((DateComponents(hour: hhmm / 100, minute: hhmm % 100), level))
             }
             return out
         }

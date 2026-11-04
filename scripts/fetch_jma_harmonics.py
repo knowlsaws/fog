@@ -313,14 +313,14 @@ def main():
                 log(f"::warning::{s['name']}({s['id']}): 分潮ページ取得失敗 {e}")
         if z0 is None:
             z0 = s.get("z0FromList") or 0.0
-        # 遅角は現地子午線基準：経度 × 240 秒の時差で天文引数を評価する
+        # 遅角は現地子午線基準：推算側で V_G + 種別 × 経度 にする（分潮一覧表に書かれた経度を優先）
         lon_for_phase = page_lon if page_lon is not None else s["longitude"]
         out_stations.append({
             "id": s["id"], "name": s["name"],
             "coordinate": {"latitude": round(s["latitude"], 5), "longitude": round(s["longitude"], 5)},
             "meanSeaLevelCm": z0,
             "constituents": constituents,
-            "utcOffsetSeconds": int(round(lon_for_phase * 240)),
+            "lagLongitudeDeg": round(lon_for_phase, 5),
         })
 
     result = {"year": args.year, "source": list_url, "stations": out_stations}
