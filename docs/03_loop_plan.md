@@ -19,7 +19,7 @@
 | L8 | 統計・相関・レポート（Core＋Foundation Models） | in_progress | | ブランチ `loop/L8-analytics`（L7 の上に積む） |
 | L9 | ホーム画面 | pending | | |
 | L10 | 撮影画面の仕上げ | pending | | |
-| L11 | ログ画面 | pending | | |
+| L11 | ログ画面 | in_progress | | ブランチ `loop/L11-log` |
 | L12 | 図鑑画面 | pending | | |
 | L13 | 釣り場画面 | pending | | |
 | L14 | ウィジェット・ロック画面・通知 | pending | | |
