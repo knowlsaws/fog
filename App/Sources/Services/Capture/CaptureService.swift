@@ -136,8 +136,10 @@ final class CaptureService {
             try? store.upsert(spot)
         }
         let previous = (try? store.sessions())?.first
-        let session = Core.Session(spotID: spot.id, startedAt: date, tackle: previous?.tackle, rigID: previous?.rigID,
+        var session = Core.Session(spotID: spot.id, startedAt: date, tackle: previous?.tackle, rigID: previous?.rigID,
                                    track: [TrackSample(at: date, coordinate: (coordinate?.isPlausible == true ? coordinate : nil) ?? spot.coordinate)], tackleID: previous?.tackleID, isAutoDetected: false)
+        // 位置が無い釣行は自動では終われない（位置で終了を判定するため）ので、その場で終えておく。ホームの「記録中」にもしない
+        if !spot.coordinate.isPlausible { session.endedAt = date }
         try? store.upsert(session)
         return session
     }

@@ -18,6 +18,19 @@ enum CatalogSeeder {
         }
         removeLegacySampleIfNeeded(store: store)
         demoteZeroCoordinateSpots(store: store)
+        endSessionsAtUnknownLocation(store: store)
+    }
+
+    /// 位置の無い釣り場で記録中のままになっている釣行を終える（位置で終了を判定できないため永遠に「記録中」だった）。
+    @MainActor
+    private static func endSessionsAtUnknownLocation(store: FogStore) {
+        guard let spots = try? store.spots(), let sessions = try? store.sessions() else { return }
+        for var session in sessions where session.isActive {
+            guard let spot = spots.first(where: { $0.id == session.spotID }), !spot.coordinate.isPlausible else { continue }
+            session.endedAt = max(session.startedAt.addingTimeInterval(60), min(Date(), session.startedAt.addingTimeInterval(3600)))
+            try? store.upsert(session)
+            log.notice("ended session at unknown location \(session.id.uuidString, privacy: .public)")
+        }
     }
 
     /// 位置なしで撮影したときに (0, 0) で作られてしまった釣り場を「位置不明・未登録」にする（ホームがギニア湾の天気を出さないように）。
