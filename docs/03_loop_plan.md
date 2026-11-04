@@ -10,7 +10,7 @@
 | --- | --- | --- | --- | --- |
 | L0 | リポジトリ基盤と CI | done | main 直push (〜aebdfc6) | 2026-11-04 TestFlight build 5 を iPhone 16 Pro で確認、5タブ表示OK。build 8 で証明書上限に当たり、署名を手動署名＋証明書永続化に変更（PR #2） |
 | L1 | データモデルと永続化 | review | #1 | CI 緑。ダミー釣行が TestFlight で再起動後も残るかの確認待ち。ブランチ `claude/l1-start-78ajhc` |
-| L2 | 天文計算と潮汐エンジン（Core） | in_progress | | ブランチ `loop/L2-astro-tide` |
+| L2 | 天文計算と潮汐エンジン（Core） | review | | CI 緑。函館 RMS 0.7cm・東京 1.6cm、満干時刻 平均 4〜6 分。ブランチ `loop/L2-astro-tide` |
 | L3 | 環境データ取得 | pending | | |
 | L4 | 釣行セッション自動検出 | pending | | |
 | L5 | 撮影と LiDAR サイズ推定 | pending | | |
