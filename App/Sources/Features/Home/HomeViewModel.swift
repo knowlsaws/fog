@@ -86,7 +86,9 @@ final class HomeViewModel {
         let store = services.store
         let env = services.environment
         let sessions = (try? store.sessions()) ?? []
-        let active = sessions.first { $0.isActive }
+        // 位置の無い釣行（室内の試し撮りなど）は、ホームの釣り場選びと「記録中」の対象にしない
+        let allSpots = (try? store.spots()) ?? []
+        let active = sessions.first { s in s.isActive && (allSpots.first { $0.id == s.spotID }?.coordinate.isPlausible ?? false) }
         isRecording = active != nil
 
         // 釣り場：記録中の釣行 → 選択中 → 現在地に最も近い登録釣り場 → 直近の釣行の釣り場

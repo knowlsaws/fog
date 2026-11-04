@@ -269,7 +269,7 @@ enum MoonSymbol {
 struct ForecastChart: View {
     let model: HomeViewModel
     /// 潮位曲線を置く高さ（釣れ率の目盛りで 4〜40 の帯）
-    private let tideBand: ClosedRange<Double> = 4...40
+    private let tideBand: ClosedRange<Double> = 4...62
     private let hours = Array(stride(from: 0, to: 24, by: 3))
 
     var body: some View {
@@ -490,8 +490,8 @@ struct ForecastChart: View {
     private var tideTicks: [Double] {
         let r = tideRange
         let span = r.upperBound - r.lowerBound
-        // 潮位は目盛りの下 4〜40 の帯に写すので、目盛りは 2〜3 本まで
-        let step = [10.0, 20, 30, 50, 100, 200].first { span / $0 <= 2.6 } ?? 200
+        // 潮位は目盛りの下 4〜62 の帯に写す。目盛りは 3〜4 本まで
+        let step = [10.0, 20, 30, 50, 100, 200].first { span / $0 <= 3.6 } ?? 200
         var ticks: [Double] = []
         var v = (r.lowerBound / step).rounded(.up) * step
         while v <= r.upperBound { ticks.append(v); v += step }
