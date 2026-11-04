@@ -86,8 +86,10 @@ final class TideEngineTests: XCTestCase {
     /// フィクスチャ（tide-data ワークフローが取得）と同梱データが揃ったときだけ走る。
     func testBundledHarmonicsAgainstJMATables() throws {
         let catalog = TideCatalog.bundled()
-        let fixtureURLs = Bundle.module.urls(forResourcesWithExtension: "txt", subdirectory: "Fixtures") ?? []
-        let tables = fixtureURLs.filter { $0.lastPathComponent.hasPrefix("jma_tide_") }
+        let fixturesDir = Bundle.module.resourceURL!.appendingPathComponent("Fixtures", isDirectory: true)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: fixturesDir.path)) ?? []
+        let tables = names.filter { $0.hasPrefix("jma_tide_") && $0.hasSuffix(".txt") }.sorted()
+            .map { fixturesDir.appendingPathComponent($0) }
         try XCTSkipIf(catalog.stations.isEmpty || tables.isEmpty, "harmonics.json かフィクスチャが未取得")
         var checked = 0
         for url in tables {
