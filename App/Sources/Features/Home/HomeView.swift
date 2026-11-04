@@ -337,19 +337,6 @@ struct ForecastChart: View {
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
             }
-            ForEach(model.dayExtremes, id: \.at) { e in
-                PointMark(x: .value("時刻", e.at), y: .value("潮位", tideY(e.levelCm)))
-                    .foregroundStyle(DS.Color.textPrimary)
-                    .symbolSize(16)
-                    .annotation(position: e.kind == .high ? .top : .bottom, spacing: 3) {
-                        HStack(spacing: 2) {
-                            Text(e.kind == .high ? "満" : "干").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-                            Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(11)).foregroundStyle(DS.Color.textPrimary)
-                        }
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(DS.Color.background.opacity(0.85), in: Capsule())
-                    }
-            }
             ForEach(model.dayTimeline, id: \.at) { p in
                 AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("釣れ率", p.score), series: .value("系列", "釣れ率面"))
                     .foregroundStyle(LinearGradient(colors: [DS.Color.accent.opacity(0.18), DS.Color.accent.opacity(0.0)], startPoint: .top, endPoint: .bottom))
@@ -383,7 +370,7 @@ struct ForecastChart: View {
                     PointMark(x: .value("今", model.now), y: .value("潮位", tideY(level)))
                         .foregroundStyle(DS.Color.sea)
                         .symbolSize(40)
-                        .annotation(position: .topLeading, spacing: 4) {
+                        .annotation(position: .topLeading, spacing: 4, overflowResolution: .init(x: .fit(to: .plot), y: .fit(to: .plot))) {
                             HStack(spacing: 2) {
                                 Text("\(Int(level.rounded()))cm").font(DS.Font.number(10))
                                 Image(systemName: (model.nowTideRateCmPerHour ?? 0) > 0 ? "arrow.up" : ((model.nowTideRateCmPerHour ?? 0) < 0 ? "arrow.down" : "minus")).font(.system(size: 8, weight: .bold))
@@ -393,6 +380,17 @@ struct ForecastChart: View {
                             .background(DS.Color.background.opacity(0.9), in: Capsule())
                         }
                 }
+            }
+            // 満干の点と時刻。最後に描いて必ず最前面に。「満」「干」は書かない（上下で分かる）
+            ForEach(model.dayExtremes, id: \.at) { e in
+                PointMark(x: .value("時刻", e.at), y: .value("潮位", tideY(e.levelCm)))
+                    .foregroundStyle(DS.Color.textPrimary)
+                    .symbolSize(16)
+                    .annotation(position: e.kind == .high ? .top : .bottom, spacing: 3, overflowResolution: .init(x: .fit(to: .plot), y: .fit(to: .plot))) {
+                        Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(9)).foregroundStyle(DS.Color.textPrimary)
+                            .padding(.horizontal, 4).padding(.vertical, 1)
+                            .background(DS.Color.background.opacity(0.9), in: Capsule())
+                    }
             }
         }
         .chartXScale(domain: model.dayStart...model.dayEnd)
@@ -492,7 +490,8 @@ struct ForecastChart: View {
     private var tideTicks: [Double] {
         let r = tideRange
         let span = r.upperBound - r.lowerBound
-        let step: Double = span > 150 ? 50 : (span > 60 ? 20 : 10)
+        // 潮位は目盛りの下 4〜40 の帯に写すので、目盛りは 2〜3 本まで
+        let step = [10.0, 20, 30, 50, 100, 200].first { span / $0 <= 2.6 } ?? 200
         var ticks: [Double] = []
         var v = (r.lowerBound / step).rounded(.up) * step
         while v <= r.upperBound { ticks.append(v); v += step }
