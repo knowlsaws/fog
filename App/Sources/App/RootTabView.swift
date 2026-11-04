@@ -20,6 +20,7 @@ struct RootTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DS.Color.background)
+            .environment(\.captureTab, { selected = .capture })
 
             tabBar
         }

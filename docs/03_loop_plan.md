@@ -20,7 +20,7 @@
 | L9 | ホーム画面 | in_progress | | ブランチ `loop/L9-home` |
 | L10 | 撮影画面の仕上げ | in_progress | | ブランチ `loop/L10-capture-polish` |
 | L11 | ログ画面 | in_progress | | ブランチ `loop/L11-log` |
-| L12 | 図鑑画面 | pending | | |
+| L12 | 図鑑画面 | in_progress | | ブランチ `loop/L12-guide` |
 | L13 | 釣り場画面 | in_progress | | ブランチ `loop/L13-spots` |
 | L14 | ウィジェット・ロック画面・通知 | pending | | |
 | L15 | 設定・データ管理・iCloud | pending | | |

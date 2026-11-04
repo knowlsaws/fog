@@ -123,6 +123,15 @@ final class CaptureService {
         return session
     }
 
+    /// サイズの手入力・修正（F-12/F-24）。手入力は推定幅 0.5 cm とする。
+    func setLength(catchID: UUID, lengthCm: Double?) {
+        guard let all = try? store.sessions(), var session = all.first(where: { $0.catches.contains { $0.id == catchID } }),
+              let index = session.catches.firstIndex(where: { $0.id == catchID }) else { return }
+        session.catches[index].lengthCm = lengthCm
+        session.catches[index].lengthErrorCm = lengthCm == nil ? nil : 0.5
+        try? store.upsert(session)
+    }
+
     /// 魚種の確定（候補 3 種の 1 タップ、F-10）／後からの修正（F-24）。
     func setSpecies(catchID: UUID, species: String, corrected: Bool) {
         guard let all = try? store.sessions(), var session = all.first(where: { $0.catches.contains { $0.id == catchID } }),
