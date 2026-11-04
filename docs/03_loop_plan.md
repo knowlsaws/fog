@@ -13,7 +13,7 @@
 | L2 | 天文計算と潮汐エンジン（Core） | in_progress | | ブランチ `loop/L2-astro-tide` |
 | L3 | 環境データ取得 | review | #4 | CI 緑。ブランチ `loop/L3-environment`。WeatherKit・Open-Meteo の実通信は実機確認待ち |
 | L4 | 釣行セッション自動検出 | in_progress | | ブランチ `loop/L4-session-detection`（L3 の上に積む） |
-| L5 | 撮影と LiDAR サイズ推定 | pending | | |
+| L5 | 撮影と LiDAR サイズ推定 | in_progress | | ブランチ `loop/L5-capture` |
 | L6 | 魚種判定 | pending | | |
 | L7 | 釣れ率エンジン（Core） | in_progress | | ブランチ `loop/L7-score-engine`（Core のみ、L3/L4 と並行） |
 | L8 | 統計・相関・レポート（Core＋Foundation Models） | in_progress | | ブランチ `loop/L8-analytics`（L7 の上に積む） |

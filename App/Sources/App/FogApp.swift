@@ -2,10 +2,12 @@ import SwiftUI
 import SwiftData
 import UserNotifications
 
+
 @main
 struct FogApp: App {
     private let services: AppServices
     private let responder = NotificationResponder()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let services = AppServices()
@@ -21,6 +23,9 @@ struct FogApp: App {
                 .environment(services)
                 .environment(services.store)
                 .task { await services.start() }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { Task { await services.didBecomeActive() } }
+                }
         }
         .modelContainer(services.persistence.container)
     }

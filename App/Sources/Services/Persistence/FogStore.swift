@@ -149,6 +149,17 @@ final class FogStore {
         try commit()
     }
 
+    /// サムネイル（アプリ内に持つのはこれだけ。写真本体はフォトライブラリ）。
+    func setThumbnail(catchID: UUID, jpeg: Data) throws {
+        guard let record = try fetchOne(CatchRecord.self, #Predicate { $0.uuid == catchID }) else { return }
+        record.thumbnailJPEG = jpeg
+        try commit()
+    }
+
+    func thumbnail(catchID: UUID) -> Data? {
+        (try? fetchOne(CatchRecord.self, #Predicate { $0.uuid == catchID }))?.thumbnailJPEG
+    }
+
     func deleteCatch(id: UUID) throws {
         guard let record = try fetchOne(CatchRecord.self, #Predicate { $0.uuid == id }) else { return }
         context.delete(record)

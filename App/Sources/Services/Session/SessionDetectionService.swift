@@ -22,6 +22,8 @@ final class SessionDetectionService {
     private let environment: EnvironmentService
     private let shore = ShoreOracle()
     private var task: Task<Void, Never>?
+    /// 終了直後に呼ばれる（写真の取り込み・レポート生成など）。保存済みの釣行 ID を渡す
+    var onSessionEnded: ((UUID) -> Void)?
     private static let log = Logger(subsystem: "fog", category: "session")
 
     init(location: LocationService, store: FogStore, scheduler: SnapshotScheduler, environment: EnvironmentService) {
@@ -153,6 +155,7 @@ final class SessionDetectionService {
         session.activity = await PedometerService().activity(from: session.startedAt, to: at)
         session = await environment.backfill(session)
         try? store.upsert(session)
+        onSessionEnded?(id)
         scheduler.stop()
         location.startMonitoring()
         lastEndedSessionID = id
