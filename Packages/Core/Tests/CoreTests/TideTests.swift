@@ -111,13 +111,16 @@ final class TideEngineTests: XCTestCase {
                 }
             }
             let rms = sqrt(sumSq / Double(max(1, n)))
-            // 満干時刻
+            // 満干時刻：平坦な極値（小潮・混合潮）は 1 cm で数十分動くので、前後との潮位差が 30 cm 以上の満干だけ比べる
             var timeErrors: [Double] = [], levelErrors: [Double] = []
             for day in days.prefix(120) {
                 guard let start = day.dayStart() else { continue }
-                let predicted = engine.extremes(from: start.addingTimeInterval(-3600), to: start.addingTimeInterval(25 * 3600))
-                for (at, level, isHigh) in day.extremes() {
-                    let same = predicted.filter { ($0.kind == .high) == isHigh }
+                let predicted = engine.extremes(from: start.addingTimeInterval(-3 * 3600), to: start.addingTimeInterval(27 * 3600))
+                let table = day.extremes().sorted { $0.0 < $1.0 }
+                for (i, (at, level, isHigh)) in table.enumerated() {
+                    let neighbours = [i > 0 ? table[i - 1].1 : nil, i + 1 < table.count ? table[i + 1].1 : nil].compactMap { $0 }
+                    guard let range = neighbours.map({ abs($0 - level) }).max(), range >= 30 else { continue }
+                    let same = predicted.filter { ($0.kind == .high) == isHigh && abs($0.at.timeIntervalSince(at)) <= 3 * 3600 }
                     guard let nearest = same.min(by: { abs($0.at.timeIntervalSince(at)) < abs($1.at.timeIntervalSince(at)) }) else { continue }
                     timeErrors.append(abs(nearest.at.timeIntervalSince(at)) / 60)
                     levelErrors.append(abs(nearest.levelCm - level))
