@@ -223,11 +223,14 @@ struct ForecastChart: View {
                 PointMark(x: .value("時刻", e.at), y: .value("潮位", tideY(e.levelCm)))
                     .foregroundStyle(DS.Color.textPrimary)
                     .symbolSize(16)
-                    .annotation(position: e.kind == .high ? .top : .bottom, spacing: 2) {
+                    .annotation(position: e.kind == .high ? .top : .bottom, spacing: 3) {
+                        // 線と重なっても読めるよう、暗い小さな面に乗せる
                         HStack(spacing: 2) {
                             Text(e.kind == .high ? "満" : "干").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-                            Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(11)).foregroundStyle(DS.Color.textSecondary)
+                            Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(11)).foregroundStyle(DS.Color.textPrimary)
                         }
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(DS.Color.background.opacity(0.85), in: Capsule())
                     }
             }
             ForEach(model.timeline, id: \.at) { p in
@@ -237,7 +240,7 @@ struct ForecastChart: View {
                 LineMark(x: .value("時刻", p.at), y: .value("釣れ率", p.score), series: .value("系列", "釣れ率"))
                     .foregroundStyle(p.isForecast && model.forecastHorizon.map { p.at > $0 } == true ? Color.white.opacity(0.35) : Color.white.opacity(0.92))
                     .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1.6))
             }
             RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.accent).lineStyle(StrokeStyle(lineWidth: 1))
         }

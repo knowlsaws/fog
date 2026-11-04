@@ -94,7 +94,7 @@ final class SpotsViewModel {
         let now = Date()
         var out: [Card] = []
         for item in items {
-            guard let name = item.name, name.contains("港") || name.contains("岸壁") || name.contains("埠頭") || name.contains("防波堤") else { continue }
+            guard let name = item.name, Self.looksLikePort(name: name, category: item.pointOfInterestCategory) else { continue }
             let c = Coordinate(latitude: item.placemark.coordinate.latitude, longitude: item.placemark.coordinate.longitude)
             if existing.contains(where: { Geo.distanceMeters($0.coordinate, c) < 300 }) { continue }
             if out.contains(where: { Geo.distanceMeters($0.spot.coordinate, c) < 300 }) { continue }
@@ -108,6 +108,18 @@ final class SpotsViewModel {
                             distanceM: currentLocation.map { Geo.distanceMeters($0, c) }, isCandidate: true))
         }
         portCandidates = out
+    }
+
+    /// 名前が「〜漁港」「〜港」「〜岸壁」「〜埠頭」「〜防波堤」で終わるものだけを漁港とみなす。
+    /// 「〜漁港緑地」「〜港店」「〜港前」のような店・公園・バス停・交差点は除く。マリーナ分類はそのまま通す。
+    static func looksLikePort(name: String, category: MKPointOfInterestCategory?) -> Bool {
+        if category == .marina { return true }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let excluded = ["店", "緑地", "公園", "駅", "前", "通", "通り", "線", "バス", "停", "入口", "交差点", "会社", "会館", "センター", "市場", "組合",
+                        "事務所", "倉庫", "工場", "ビル", "ホテル", "食堂", "レストラン", "カフェ", "温泉", "橋", "トンネル", "駐車場", "学校", "病院", "郵便局", "神社", "寺"]
+        if excluded.contains(where: { trimmed.contains($0) }) { return false }
+        let suffixes = ["漁港", "港", "岸壁", "埠頭", "ふ頭", "防波堤", "波止", "堤防", "桟橋"]
+        return suffixes.contains { trimmed.hasSuffix($0) }
     }
 
     /// 候補の漁港を自分の釣り場として登録する（よく行く漁港）。
