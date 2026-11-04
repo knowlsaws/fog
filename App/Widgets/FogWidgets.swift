@@ -106,29 +106,49 @@ private struct TideGraph: View {
     let points: [WidgetSnapshot.Point]
     let range: ClosedRange<Double>?
     let now: Date
+
     var body: some View {
         GeometryReader { geo in
-            if points.count >= 2, let range {
-                let t0 = points.first!.at.timeIntervalSince1970, t1 = points.last!.at.timeIntervalSince1970
-                let span = max(1, t1 - t0)
-                let levels = points.compactMap(\.tideLevelCm)
-                let lo = range.lowerBound, hi = range.upperBound
-                func x(_ d: Date) -> CGFloat { CGFloat((d.timeIntervalSince1970 - t0) / span) * geo.size.width }
-                func y(_ l: Double) -> CGFloat { geo.size.height - CGFloat((l - lo) / (hi - lo)) * geo.size.height }
-                Path { path in
-                    for (i, p) in points.enumerated() {
-                        let pt = CGPoint(x: x(p.at), y: y(p.tideLevelCm ?? levels.first ?? lo))
-                        if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
-                    }
-                }
-                .stroke(WColor.textSecondary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                let nx = x(now)
-                Path { p in p.move(to: CGPoint(x: nx, y: 0)); p.addLine(to: CGPoint(x: nx, y: geo.size.height)) }
+            if points.count >= 2, range != nil {
+                linePath(in: geo.size)
+                    .stroke(WColor.textSecondary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                nowPath(in: geo.size)
                     .stroke(WColor.accent, style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
             } else {
                 Text("—").font(.system(size: 11)).foregroundStyle(WColor.textTertiary)
             }
         }
+    }
+
+    private func x(_ d: Date, width: CGFloat) -> CGFloat {
+        guard let first = points.first, let last = points.last else { return 0 }
+        let t0 = first.at.timeIntervalSince1970
+        let span = max(1, last.at.timeIntervalSince1970 - t0)
+        return CGFloat((d.timeIntervalSince1970 - t0) / span) * width
+    }
+
+    private func y(_ level: Double, height: CGFloat) -> CGFloat {
+        guard let range else { return height / 2 }
+        let lo = range.lowerBound, hi = range.upperBound
+        return height - CGFloat((level - lo) / (hi - lo)) * height
+    }
+
+    private func linePath(in size: CGSize) -> Path {
+        var path = Path()
+        let fallback = points.compactMap(\.tideLevelCm).first ?? (range?.lowerBound ?? 0)
+        for (i, p) in points.enumerated() {
+            let pt = CGPoint(x: x(p.at, width: size.width), y: y(p.tideLevelCm ?? fallback, height: size.height))
+            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+        }
+        return path
+    }
+
+    private func nowPath(in size: CGSize) -> Path {
+        var path = Path()
+        let nx = x(now, width: size.width)
+        path.move(to: CGPoint(x: nx, y: 0))
+        path.addLine(to: CGPoint(x: nx, y: size.height))
+        return path
     }
 }
 
@@ -254,7 +274,7 @@ struct LockScoreView: View {
                 .gaugeStyle(.accessoryCircular)
             case .accessoryInline:
                 if let e = entry.nextEvent {
-                    Text("釣れ率 \(entry.score) · \(e.label) ") + Text(e.at, style: .time)
+                    Text("釣れ率 \(entry.score) · \(e.label) \(e.at, style: .time)")
                 } else {
                     Text("釣れ率 \(entry.score)")
                 }

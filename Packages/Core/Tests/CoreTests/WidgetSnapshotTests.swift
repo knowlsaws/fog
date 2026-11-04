@@ -5,8 +5,11 @@ final class WidgetSnapshotTests: XCTestCase {
     private let base = Date(timeIntervalSince1970: 1_762_210_800) // 2025-11-04 00:00 JST
 
     private func snapshot() -> WidgetSnapshot {
-        let points = (0..<8).map { i in
-            WidgetSnapshot.Point(at: base.addingTimeInterval(Double(i) * 900), score: 50 + i * 5, tideRising: i < 4, tideLevelCm: 100 + Double(i) * 10)
+        var points: [WidgetSnapshot.Point] = []
+        for i in 0..<8 {
+            let at: Date = base.addingTimeInterval(Double(i) * 900)
+            let level: Double = 100 + Double(i) * 10
+            points.append(WidgetSnapshot.Point(at: at, score: 50 + i * 5, tideRising: i < 4, tideLevelCm: level))
         }
         let events = [WidgetSnapshot.Event(at: base.addingTimeInterval(3600), label: "満潮"), WidgetSnapshot.Event(at: base.addingTimeInterval(7200), label: "マズメ")]
         return WidgetSnapshot(generatedAt: base, spotName: "函館港", points: points, events: events, isRecording: true, tackle: .bait)
@@ -41,9 +44,9 @@ final class WidgetSnapshotTests: XCTestCase {
         let tz = TimeZone(identifier: "Asia/Tokyo")!
         var points: [ScorePoint] = []
         for i in 0..<96 {
-            let t = base.addingTimeInterval(Double(i) * 900)
-            let hour = Double(i) / 4
-            let score = (hour >= 16 && hour < 18) ? 85 : 40
+            let t: Date = base.addingTimeInterval(Double(i) * 900)
+            let hour: Double = Double(i) / 4
+            let score: Int = (hour >= 16 && hour < 18) ? 85 : 40
             points.append(ScorePoint(at: t, score: score, isForecast: false, confidence: .observed))
         }
         let plan = PeakNotificationPlanner.plan(points: points, now: base.addingTimeInterval(8 * 3600), timeZone: tz)
