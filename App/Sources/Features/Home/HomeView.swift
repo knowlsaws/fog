@@ -341,10 +341,7 @@ struct ForecastChart: View {
 
     private var chart: some View {
         Chart {
-            ForEach(dayShading, id: \.0) { (start, end) in
-                RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
-                    .foregroundStyle(Color.black.opacity(0.28))
-            }
+            // 夜の濃い背景は出さない（日の出入は線で分かる。2026-11-04 実機フィードバック）
             // 潮止まりの帯（満干の前後 30 分、薄いグレー）。文字なし
             ForEach(model.dayExtremes, id: \.at) { e in
                 RectangleMark(xStart: .value("s", e.at.addingTimeInterval(-30 * 60)), xEnd: .value("e", e.at.addingTimeInterval(30 * 60)), yStart: .value("y0", 0), yEnd: .value("y1", 100))
@@ -358,7 +355,7 @@ struct ForecastChart: View {
             // 太陽が出ている時間（黄の横線、両端が日の出・日の入）と月が出ている時間（紫の横線）
             ForEach(skySpans, id: \.start) { span in
                 RuleMark(xStart: .value("s", span.start), xEnd: .value("e", span.end), y: .value("y", span.isSun ? 91 : 83))
-                    .foregroundStyle((span.isSun ? DS.Color.sun : DS.Color.moon).opacity(0.7))
+                    .foregroundStyle((span.isSun ? DS.Color.daylight : DS.Color.moon).opacity(0.8))
                     .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round))
             }
             ForEach(model.dayTide) { p in
@@ -394,7 +391,7 @@ struct ForecastChart: View {
                             Image(systemName: m.isSun ? "sun.max.fill" : "moon.fill").font(.system(size: 7))
                             Text(m.at, format: .dateTime.hour().minute()).font(DS.Font.number(8))
                         }
-                        .foregroundStyle(m.isSun ? DS.Color.sun : DS.Color.moon)
+                        .foregroundStyle(m.isSun ? DS.Color.daylight : DS.Color.moon)
                     }
             }
             if model.now >= model.dayStart && model.now <= model.dayEnd {
@@ -654,7 +651,7 @@ struct DayDetailSheet: View {
             Divider().overlay(DS.Color.faded)
             VStack(spacing: DS.Spacing.s) {
                 ForEach(twilights, id: \.1) { t in row(t.0, time(t.1) + "〜" + time(t.2), color: DS.Color.sun) }
-                row("日の出 / 日の入", [model.daySun?.sunrise, model.daySun?.sunset].map { $0.map(time) ?? "—" }.joined(separator: " / "), color: DS.Color.sun)
+                row("日の出 / 日の入", [model.daySun?.sunrise, model.daySun?.sunset].map { $0.map(time) ?? "—" }.joined(separator: " / "), color: DS.Color.daylight)
                 row("月の出 / 月の入", [model.dayMoon?.moonrise, model.dayMoon?.moonset].map { $0.map(time) ?? "—" }.joined(separator: " / "), color: DS.Color.moon)
                 ForEach(model.dayExtremes, id: \.at) { e in row(e.kind == .high ? "満潮" : "干潮", time(e.at) + "  \(Int(e.levelCm.rounded())) cm", color: DS.Color.sea) }
             }
