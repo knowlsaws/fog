@@ -52,7 +52,7 @@ final class AppServices {
     /// 起動時：ダミーデータ、通知、自動検出。
     func start() async {
         RouterHolder.shared.router = router
-        SampleSeeder.seedIfNeeded(store: store)
+        CatalogSeeder.seedIfNeeded(store: store)
         await SessionNotifications.requestAuthorization()
         detection.start()
         drainPendingHookEvents()
