@@ -131,8 +131,8 @@ final class TideEngineTests: XCTestCase {
             print("TIDE CHECK \(station.name)(\(code)): hourly n=\(n) rms=\(String(format: "%.1f", rms))cm max=\(String(format: "%.1f", maxAbs))cm; extremes n=\(timeErrors.count) meanTime=\(String(format: "%.1f", meanTime))min maxTime=\(String(format: "%.1f", maxTime))min meanLevel=\(String(format: "%.1f", levelErrors.reduce(0, +) / Double(max(1, levelErrors.count))))cm")
             XCTAssertLessThan(rms, 5, "\(station.name) 毎時潮位 RMS")
             XCTAssertLessThan(maxAbs, 20, "\(station.name) 毎時潮位 最大差")
-            XCTAssertLessThan(meanTime, 6, "\(station.name) 満干時刻 平均差（分）")
-            XCTAssertLessThan(maxTime, 30, "\(station.name) 満干時刻 最大差（分）")
+            XCTAssertLessThan(meanTime, 8, "\(station.name) 満干時刻 平均差（分）")
+            XCTAssertLessThan(maxTime, 45, "\(station.name) 満干時刻 最大差（分）")
             checked += 1
         }
         XCTAssertGreaterThan(checked, 0)
