@@ -1,24 +1,27 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 @main
 struct FogApp: App {
-    private let persistence: PersistenceController
-    private let store: FogStore
+    private let services: AppServices
+    private let responder = NotificationResponder()
 
     init() {
-        let persistence = PersistenceController.live()
-        self.persistence = persistence
-        self.store = FogStore(container: persistence.container)
+        let services = AppServices()
+        self.services = services
+        responder.services = services
+        UNUserNotificationCenter.current().delegate = responder
     }
 
     var body: some Scene {
         WindowGroup {
             RootTabView()
                 .preferredColorScheme(.dark)
-                .environment(store)
-                .task { await MainActor.run { SampleSeeder.seedIfNeeded(store: store) } }
+                .environment(services)
+                .environment(services.store)
+                .task { await services.start() }
         }
-        .modelContainer(persistence.container)
+        .modelContainer(services.persistence.container)
     }
 }

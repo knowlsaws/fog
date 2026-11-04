@@ -46,6 +46,8 @@ public struct SessionDetector: Sendable {
 
     public var settings: DetectionSettings
     public private(set) var state: State = .idle
+    /// cooldown から候補に移ったとき、開始が確定したら resume に差し替えるための記憶
+    private var pendingResume: (Date, Coordinate)?
 
     public init(settings: DetectionSettings = .default) {
         self.settings = settings
@@ -60,6 +62,7 @@ public struct SessionDetector: Sendable {
 
         switch state {
         case .idle:
+            pendingResume = nil
             guard fishingPlace, !moving else { return [] }
             state = .candidate(since: fix.at, anchor: fix.coordinate, spotID: context.registeredSpotID)
             return []
@@ -133,9 +136,6 @@ public struct SessionDetector: Sendable {
             return []
         }
     }
-
-    /// cooldown から候補に移ったとき、開始が確定したら resume に差し替えるための記憶
-    private var pendingResume: (Date, Coordinate)?
 
     /// `process` の結果の `.start` をランガンなら `.resume` に置き換える。呼び出し側はこちらを使う。
     public mutating func handle(_ fix: LocationFix, context: Context) -> [Event] {

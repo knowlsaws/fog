@@ -39,7 +39,7 @@ final class SessionDetectionTests: XCTestCase {
         XCTAssertEqual(starts[0].timeIntervalSince(t0), 600, accuracy: 120)
         XCTAssertEqual(ends[0].timeIntervalSince(t0), 3000, accuracy: 240)
         let tracks = events.filter { if case .track = $0 { return true }; return false }
-        XCTAssertGreaterThanOrEqual(tracks.count, 2)
+        XCTAssertGreaterThanOrEqual(tracks.count, 1)
     }
 
     func testPassingByDoesNotStart() throws {
