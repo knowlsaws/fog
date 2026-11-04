@@ -94,7 +94,7 @@ struct HomeView: View {
                         .animation(.easeOut(duration: 0.6), value: model.score?.score)
                     Text("\(model.score?.score ?? 0)")
                         .font(DS.Font.score(76))
-                        .foregroundStyle(DS.Color.accent)
+                        .foregroundStyle(DS.Color.textPrimary)
                         .contentTransition(.numericText())
                 }
                 .aspectRatio(1, contentMode: .fit)
@@ -426,10 +426,11 @@ struct ForecastChart: View {
         .chartXScale(domain: model.dayStart...model.dayEnd)
         .chartYScale(domain: 0...100)
         .chartYAxis {
+            // 左軸：釣れ率（テーマ色の緑。右軸の潮位は海の青）
             AxisMarks(position: .leading, values: [0, 50, 100]) { value in
                 AxisGridLine().foregroundStyle(DS.Color.faded.opacity(0.5))
                 AxisValueLabel {
-                    if let v = value.as(Int.self) { Text("\(v)").font(DS.Font.number(9)).foregroundStyle(DS.Color.textTertiary) }
+                    if let v = value.as(Int.self) { Text("\(v)").font(DS.Font.number(9)).foregroundStyle(DS.Color.accent) }
                 }
             }
             // 右軸：潮位 cm（釣れ率の目盛りに写した位置に、元の cm を書く）
