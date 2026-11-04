@@ -46,6 +46,20 @@ struct OpenCaptureIntent: AppIntent {
     }
 }
 
+/// カメラコントロール（iPhone 16 Pro の側面ボタン）からアプリのカメラを開く（§8）。
+/// 設定 > カメラ > カメラコントロールでこのアプリを選ぶと、ボタンでアプリが起動して撮影画面になる。
+struct FogCameraCaptureIntent: CameraCaptureIntent {
+    struct AppContext: Codable, Sendable {}
+    static let title: LocalizedStringResource = "Fog で撮影"
+    static let description = IntentDescription("釣れた魚を撮影して記録する")
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        RouterHolder.shared.router?.pending = .capture
+        return .result()
+    }
+}
+
 /// Intent から Router に届けるための置き場（App が起動時に設定）。
 @MainActor
 final class RouterHolder {
