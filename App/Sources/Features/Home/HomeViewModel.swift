@@ -77,11 +77,13 @@ final class HomeViewModel {
         // 釣り場：記録中の釣行 → 選択中 → 現在地に最も近い登録釣り場 → 直近の釣行の釣り場
         // 位置が無い（0, 0）釣り場はホームの対象にしない
         let spots = ((try? store.spots()) ?? []).filter { $0.coordinate.isPlausible }
-        let selectedID = UserDefaults.standard.string(forKey: "fog.homeSpotID").flatMap(UUID.init(uuidString:))
+        let selectedRaw = UserDefaults.standard.string(forKey: "fog.homeSpotID")
+        let useCurrentLocation = selectedRaw == Self.currentLocationKey
+        let selectedID = selectedRaw.flatMap(UUID.init(uuidString:))
         let location = services.location.lastFix?.coordinate
         if let active, let s = spots.first(where: { $0.id == active.spotID }) {
             spot = s
-        } else if active != nil {
+        } else if active != nil || useCurrentLocation {
             spot = nil
         } else if let selectedID, let s = spots.first(where: { $0.id == selectedID }) {
             spot = s
@@ -189,12 +191,50 @@ final class HomeViewModel {
         dayOffset = Int((cal.startOfDay(for: date).timeIntervalSince(today) / 86_400).rounded())
     }
 
+    static let currentLocationKey = "current"
+
     func select(spot: Spot) {
         UserDefaults.standard.set(spot.id.uuidString, forKey: "fog.homeSpotID")
         Task { await refresh() }
     }
 
-    var availableSpots: [Spot] { ((try? services?.store.spots()) ?? []).filter(\.isRegistered) }
+    /// 「現在地」を選ぶ：登録釣り場があっても今いる場所の情報を出す
+    func selectCurrentLocation() {
+        UserDefaults.standard.set(Self.currentLocationKey, forKey: "fog.homeSpotID")
+        Task { await refresh() }
+    }
+
+    /// 同梱の港データから漁港を選んで釣り場に登録し、ホームの釣り場にする
+    func select(port: Port) {
+        guard let services else { return }
+        let existing = (try? services.store.spots()) ?? []
+        if let same = existing.first(where: { Geo.distanceMeters($0.coordinate, port.coordinate) < 300 }) {
+            var s = same; s.isRegistered = true
+            try? services.store.upsert(s)
+            select(spot: s)
+            return
+        }
+        let spot = Spot(name: port.name, coordinate: port.coordinate, isRegistered: true)
+        try? services.store.upsert(spot)
+        select(spot: spot)
+    }
+
+    var availableSpots: [Spot] { ((try? services?.store.spots()) ?? []).filter { $0.isRegistered && $0.coordinate.isPlausible } }
+
+    var isUsingCurrentLocation: Bool { UserDefaults.standard.string(forKey: "fog.homeSpotID") == Self.currentLocationKey }
+
+    var currentLocation: Coordinate? { services?.location.lastFix?.coordinate }
+
+    private static let portCatalog = PortCatalog.bundled()
+
+    /// 近い順の漁港（検索語があれば全国から名前で絞る）
+    func ports(matching query: String, limit: Int = 30) -> [Port] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let base = Self.portCatalog.ports
+        let origin = currentLocation ?? coordinate
+        let filtered = q.isEmpty ? base : base.filter { $0.name.contains(q) }
+        return filtered.sorted { Geo.distanceMeters($0.coordinate, origin) < Geo.distanceMeters($1.coordinate, origin) }.prefix(limit).map { $0 }
+    }
 
     /// 4 チップ：値は「次の出来事の時刻」か「今の数値」。残り時間は出さない（時刻と紛らわしいため）。
     private func makeChips(_ env: EnvSnapshot, fetchFailed: Bool) -> [Chip] {

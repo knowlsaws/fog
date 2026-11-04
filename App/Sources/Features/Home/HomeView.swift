@@ -34,7 +34,7 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in Task { await model.refresh() } }
         .sheet(isPresented: $showBreakdown) { BreakdownSheet(result: model.score).presentationDetents([.medium]) }
-        .sheet(isPresented: $showSpots) { SpotSwitchSheet(spots: model.availableSpots, current: model.spot) { model.select(spot: $0); showSpots = false }.presentationDetents([.medium]) }
+        .sheet(isPresented: $showSpots) { SpotSwitchSheet(model: model) { showSpots = false }.presentationDetents([.large]) }
         .sheet(item: $chipDetail) { ChipDetailSheet(chip: $0, model: model).presentationDetents([.medium]) }
         .sheet(isPresented: $showSettings) { SettingsView() }
     }
@@ -512,31 +512,73 @@ struct ChipDetailSheet: View {
     }
 }
 
-/// 釣り場切替。
+/// 釣り場切替：現在地、登録済みの釣り場、近い順の漁港（検索で全国）。漁港を選ぶと登録してホームの釣り場になる。
 struct SpotSwitchSheet: View {
-    let spots: [Spot]
-    let current: Spot?
-    let onSelect: (Spot) -> Void
+    let model: HomeViewModel
+    let onDone: () -> Void
+    @State private var query = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.s) {
-            ForEach(spots) { s in
-                Button { onSelect(s) } label: {
-                    HStack {
-                        Text(s.name).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
-                        Spacer()
-                        if s.id == current?.id { Circle().fill(DS.Color.accent).frame(width: 8, height: 8) }
+        let registered = model.availableSpots
+        let ports = model.ports(matching: query)
+        let origin = model.currentLocation
+        VStack(alignment: .leading, spacing: DS.Spacing.m) {
+            Text("釣り場").font(.system(size: 22, weight: .bold)).foregroundStyle(DS.Color.textPrimary)
+            TextField("漁港名で探す（全国）", text: $query)
+                .font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                .padding(DS.Spacing.m).background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: DS.Spacing.s) {
+                    if query.isEmpty {
+                        rowButton(title: "現在地", subtitle: "今いる場所の情報を出す", selected: model.isUsingCurrentLocation, accent: true) {
+                            model.selectCurrentLocation(); onDone()
+                        }
+                        if !registered.isEmpty {
+                            Text("登録した釣り場").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).padding(.top, DS.Spacing.s)
+                            ForEach(registered) { s in
+                                rowButton(title: s.name, subtitle: origin.map { Self.distance($0, s.coordinate) } ?? "", selected: !model.isUsingCurrentLocation && s.id == model.spot?.id, accent: false) {
+                                    model.select(spot: s); onDone()
+                                }
+                            }
+                        }
+                        Text("近くの漁港").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).padding(.top, DS.Spacing.s)
                     }
-                    .padding(DS.Spacing.m)
-                    .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
+                    ForEach(ports.filter { p in !registered.contains { Geo.distanceMeters($0.coordinate, p.coordinate) < 300 } }) { p in
+                        rowButton(title: p.name, subtitle: origin.map { Self.distance($0, p.coordinate) } ?? (p.pref ?? ""), selected: false, accent: false) {
+                            model.select(port: p); onDone()
+                        }
+                    }
+                    if ports.isEmpty {
+                        Text("見つかりません").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                    }
                 }
-                .buttonStyle(.plain)
+                .padding(.bottom, DS.Spacing.xl)
             }
-            if spots.isEmpty { Text("釣行が始まると釣り場が登録されます").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) }
-            Spacer()
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DS.Color.background)
+    }
+
+    private func rowButton(title: String, subtitle: String, selected: Bool, accent: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                    if !subtitle.isEmpty { Text(subtitle).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) }
+                }
+                Spacer()
+                if selected { Circle().fill(DS.Color.accent).frame(width: 8, height: 8) }
+                else if accent { Image(systemName: "location.fill").font(.system(size: 12)).foregroundStyle(DS.Color.textSecondary) }
+            }
+            .padding(DS.Spacing.m)
+            .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static func distance(_ a: Coordinate, _ b: Coordinate) -> String {
+        let m = Geo.distanceMeters(a, b)
+        return m < 1000 ? "\(Int(m)) m" : String(format: "%.1f km", m / 1000)
     }
 }
