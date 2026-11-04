@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var showBreakdown = false
     @State private var showSpots = false
     @State private var showSettings = false
+    @State private var showMoon = false
     @State private var chipDetail: HomeViewModel.Chip?
 
     var body: some View {
@@ -38,6 +39,7 @@ struct HomeView: View {
         .sheet(isPresented: $showSpots) { SpotSwitchSheet(model: model) { showSpots = false }.presentationDetents([.large]) }
         .sheet(item: $chipDetail) { ChipDetailSheet(chip: $0, model: model).presentationDetents([.medium]) }
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showMoon) { MoonSheet(model: model).presentationDetents([.medium]) }
     }
 
     // MARK: ヘッダー
@@ -58,7 +60,10 @@ struct HomeView: View {
                 Text(model.now, format: .dateTime.hour().minute()).font(DS.Font.number(14)).foregroundStyle(DS.Color.textTertiary)
             }
             Spacer()
-            Image(systemName: MoonSymbol.name(age: model.moonAge)).font(.system(size: 20)).foregroundStyle(DS.Color.moon).frame(height: 32)
+            Button { showMoon = true } label: {
+                Image(systemName: MoonSymbol.name(age: model.moonAge)).font(.system(size: 20)).foregroundStyle(DS.Color.moon).frame(height: 32)
+            }
+            .buttonStyle(.plain)
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape").font(.system(size: 20)).foregroundStyle(DS.Color.textSecondary).frame(height: 32)
             }
@@ -180,7 +185,66 @@ struct PulsingDot: View {
     }
 }
 
+/// 月の詳細（ヘッダーの月相アイコンをタップ）：月相名、月齢、輝面比、今日の月の出・月の入、次の満月・新月。
+struct MoonSheet: View {
+    let model: HomeViewModel
+
+    var body: some View {
+        let age = model.moonAge
+        let times = MoonCalculator.times(on: model.now, at: model.coordinate, timeZone: model.timeZone)
+        let fraction = MoonCalculator.illuminatedFraction(at: model.now)
+        let synodic = 29.530589
+        let toFull = ((14.765 - age) + synodic).truncatingRemainder(dividingBy: synodic)
+        let toNew = (synodic - age).truncatingRemainder(dividingBy: synodic)
+        VStack(alignment: .leading, spacing: DS.Spacing.m) {
+            HStack(spacing: DS.Spacing.m) {
+                Image(systemName: MoonSymbol.name(age: age)).font(.system(size: 40)).foregroundStyle(DS.Color.moon)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(MoonSymbol.phaseName(age: age)).font(DS.Font.number(24)).foregroundStyle(DS.Color.textPrimary)
+                    Text(String(format: "月齢 %.1f · 輝面 %d%%", age, Int((fraction * 100).rounded()))).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                }
+                Spacer()
+            }
+            row("月の出", times.moonrise.map { $0.formatted(.dateTime.hour().minute()) } ?? "—")
+            row("月の入", times.moonset.map { $0.formatted(.dateTime.hour().minute()) } ?? "—")
+            row("次の満月", model.now.addingTimeInterval(toFull * 86_400).formatted(.dateTime.month().day()) + "（\(Int(toFull.rounded())) 日後）")
+            row("次の新月", model.now.addingTimeInterval(toNew * 86_400).formatted(.dateTime.month().day()) + "（\(Int(toNew.rounded())) 日後）")
+            if let moon = model.score?.breakdown.first(where: { $0.factor == .moon }) {
+                row("釣れ率への影響", (moon.points > 0 ? "+" : "") + "\(Int(moon.points)) " + moon.detail)
+            }
+            Text("潮の大きさ（大潮・小潮）は月齢から決まります。月相の加点は満月・新月の前後で +2 です。")
+                .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(DS.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.Color.background)
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
+            Spacer()
+            Text(value).font(DS.Font.number(16)).foregroundStyle(DS.Color.textPrimary)
+        }
+    }
+}
+
 enum MoonSymbol {
+    /// 月齢から日本語の月相名
+    static func phaseName(age: Double) -> String {
+        switch age {
+        case ..<1.8, 27.7...: return "新月"
+        case ..<5.5: return "三日月"
+        case ..<9.2: return "上弦"
+        case ..<12.9: return "十三夜"
+        case ..<16.6: return "満月"
+        case ..<20.3: return "十六夜"
+        case ..<24: return "下弦"
+        default: return "有明"
+        }
+    }
+
     static func name(age: Double) -> String {
         switch age {
         case ..<1.8, 27.7...: return "moonphase.new.moon"
