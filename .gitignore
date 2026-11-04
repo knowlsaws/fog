@@ -31,3 +31,6 @@ __pycache__/
 
 # ワークツリー
 .worktrees/
+
+# 学習データ（リポジトリに上げない）
+data/fish/

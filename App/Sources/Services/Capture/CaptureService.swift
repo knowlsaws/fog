@@ -31,7 +31,7 @@ final class CaptureService {
         set { UserDefaults.standard.set(newValue?.uuidString, forKey: "fog.currentRig") }
     }
 
-    init(store: FogStore, environment: EnvironmentService, detection: SessionDetectionService, classifier: SpeciesClassifying = PlaceholderSpeciesClassifier()) {
+    init(store: FogStore, environment: EnvironmentService, detection: SessionDetectionService, classifier: SpeciesClassifying = CoreMLSpeciesClassifier()) {
         self.store = store
         self.environment = environment
         self.detection = detection
@@ -127,9 +127,12 @@ final class CaptureService {
     func setSpecies(catchID: UUID, species: String, corrected: Bool) {
         guard let all = try? store.sessions(), var session = all.first(where: { $0.catches.contains { $0.id == catchID } }),
               let index = session.catches.firstIndex(where: { $0.id == catchID }) else { return }
+        let predicted = session.catches[index].speciesCandidates.first?.species ?? session.catches[index].species
         session.catches[index].species = species
         session.catches[index].speciesCorrected = corrected
         if corrected { session.catches[index].speciesConfidence = 1 }
         try? store.upsert(session)
+        // 端末内の補正テーブルに学習（次回の候補順に反映。F-24）
+        CoreMLSpeciesClassifier.learn(predicted: predicted, corrected: species)
     }
 }
