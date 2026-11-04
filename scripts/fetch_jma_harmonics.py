@@ -137,7 +137,7 @@ class TableParser(HTMLParser):
                 self._links[-1][1] += data
 
 
-DEG_RE = re.compile(r"(\d{1,3})\s*[°度]\s*(\d{1,2}(?:\.\d+)?)\s*[′'分]?")
+DEG_RE = re.compile(r"(\d{1,3})\s*[°゜度]\s*(\d{1,2}(?:\.\d+)?)\s*[′'分]?")
 DEC_RE = re.compile(r"^-?\d{1,3}\.\d+$")
 
 
@@ -160,18 +160,22 @@ def parse_station_list(page_html, base_url):
             cells = [c["text"] for c in row]
             if len(cells) < 4:
                 continue
-            code = next((c for c in cells if re.fullmatch(r"[A-Z0-9]{2}", c)), None)
-            angles = [parse_angle(c) for c in cells]
-            nums = [a for a in angles if a is not None]
-            if not code or len(nums) < 2:
+            # 行: 番号, 記号(英字を含む2文字), 名前, 緯度(44゜21'), 経度(143゜22'), 平均水面(cm), ..., M2 振幅 遅角, S2, K1, O1
+            code = next((c for c in cells if re.fullmatch(r"[A-Z0-9]{2}", c) and re.search(r"[A-Z]", c)), None)
+            deg_cells = [(i, parse_angle(c)) for i, c in enumerate(cells) if DEG_RE.search(c)]
+            if not code or len(deg_cells) < 2:
                 continue
-            lat = next((a for a in nums if 20 <= a <= 46), None)
-            lon = next((a for a in nums if 122 <= a <= 154), None)
+            lat = next((a for _, a in deg_cells if a is not None and 20 <= a <= 46), None)
+            lon = next((a for _, a in deg_cells if a is not None and 122 <= a <= 154), None)
             if lat is None or lon is None:
                 continue
+            lon_index = max(i for i, _ in deg_cells)
+            z0_from_list = None
+            if lon_index + 1 < len(cells) and re.fullmatch(r"-?\d+(\.\d+)?", cells[lon_index + 1].strip()):
+                z0_from_list = float(cells[lon_index + 1])
             name = next((c for c in cells if re.search(r"[぀-ヿ一-鿿]", c) and len(c) <= 12), "")
             links = [(urllib.parse.urljoin(base_url, h), t) for c in row for h, t in c["links"]]
-            harmonics = [h for h, t in links if "分潮" in t or "bunchou" in h.lower() or "harmonic" in h.lower()]
+            harmonics = [h for h, t in links if "分潮" in t or "harms" in h.lower() or "bunchou" in h.lower()]
             tide = [h for h, t in links if "潮位表" in t or "/txt/" in h or "suisan" in h.lower() and h.endswith(".txt")]
             # 主要4分潮（M2,S2,K1,O1 の振幅・遅角）が並ぶ数値列を拾う
             numeric = []
@@ -183,7 +187,7 @@ def parse_station_list(page_html, base_url):
                 "id": code, "name": name, "latitude": lat, "longitude": lon,
                 "harmonicsURL": harmonics[0] if harmonics else None,
                 "tideURL": tide[0] if tide else None,
-                "numeric": numeric, "cells": cells,
+                "numeric": numeric, "cells": cells, "z0FromList": z0_from_list,
             })
     return stations, p
 
@@ -289,16 +293,16 @@ def main():
                 hp = fetch(s["harmonicsURL"])
                 z0, cons = parse_harmonics_page(hp)
                 constituents = [{"name": n, "amplitudeCm": a, "phaseLagDeg": p_} for n, a, p_ in cons]
-                if len(cons) < 10:
-                    log(f"::warning::{s['name']}({s['id']}): 分潮 {len(cons)} 個しか解析できず: {s['harmonicsURL']}")
-                    snippet = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", hp))[:600]
-                    log(f"  snippet: {snippet}")
+                if len(cons) < 10 or count == 1:
+                    if len(cons) < 10:
+                        log(f"::warning::{s['name']}({s['id']}): 分潮 {len(cons)} 個しか解析できず: {s['harmonicsURL']}")
+                    snippet = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", hp))[:900]
+                    log(f"  {s['name']}: z0={z0} cons={len(cons)} snippet: {snippet}")
                 time.sleep(0.3)
             except Exception as e:  # noqa: BLE001
                 log(f"::warning::{s['name']}({s['id']}): 分潮ページ取得失敗 {e}")
         if z0 is None:
-            # 一覧の数値列に Z0 がある場合（主要4分潮の前に平均水面が並ぶ）は拾えないので 0 とし、後で補正する
-            z0 = 0.0
+            z0 = s.get("z0FromList") or 0.0
         out_stations.append({
             "id": s["id"], "name": s["name"],
             "coordinate": {"latitude": round(s["latitude"], 5), "longitude": round(s["longitude"], 5)},
