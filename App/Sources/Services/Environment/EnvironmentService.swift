@@ -19,8 +19,13 @@ final class EnvironmentService {
     private let storeURL: URL?
     private static let log = Logger(subsystem: "fog", category: "environment")
 
-    init(weather: WeatherProviding = WeatherKitProvider(), marine: MarineProviding = OpenMeteoMarineClient(),
-         barometer: BarometerService = BarometerService(), catalog: TideCatalog = .bundled(), storeURL: URL? = EnvironmentService.defaultStoreURL()) {
+    /// 本番構成（WeatherKit / Open-Meteo / 端末気圧計 / 同梱分潮データ）。
+    static func live() -> EnvironmentService {
+        EnvironmentService(weather: WeatherKitProvider(), marine: OpenMeteoMarineClient(), barometer: BarometerService(),
+                           catalog: .bundled(), storeURL: defaultStoreURL())
+    }
+
+    init(weather: WeatherProviding, marine: MarineProviding, barometer: BarometerService, catalog: TideCatalog, storeURL: URL?) {
         self.weather = weather
         self.marine = marine
         self.barometer = barometer
@@ -113,7 +118,7 @@ final class EnvironmentService {
         var gate: FetchGate
     }
 
-    static func defaultStoreURL() -> URL? {
+    nonisolated static func defaultStoreURL() -> URL? {
         let base = PersistenceController.storeURL().deletingLastPathComponent()
         return base.appendingPathComponent("environment-cache.json")
     }
