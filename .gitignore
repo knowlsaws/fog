@@ -1,0 +1,24 @@
+# Xcode（XcodeGen で生成する）
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+*.ipa
+*.xcarchive
+*.log
+
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# 秘密情報（絶対にコミットしない）
+*.p8
+*.p12
+*.mobileprovision
+*.cer
+.env
+
+# OS
+.DS_Store

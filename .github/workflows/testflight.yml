@@ -1,0 +1,89 @@
+name: testflight
+
+# main への push で署名付きアーカイブを作り App Store Connect（TestFlight）へアップロードする。
+# 必要な Secrets（開発者が登録）:
+#   APPLE_TEAM_ID        : Apple Developer の Team ID
+#   ASC_KEY_ID           : App Store Connect API キーの Key ID
+#   ASC_ISSUER_ID        : 同 Issuer ID
+#   ASC_PRIVATE_KEY      : 同 .p8 の中身（base64 エンコード）
+# 必要な Variables:
+#   BUNDLE_ID_PREFIX     : 例 jp.knowlsaws（バンドル ID は {prefix}.fog になる）
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  BUNDLE_ID_PREFIX: ${{ vars.BUNDLE_ID_PREFIX }}
+  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+jobs:
+  archive-upload:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    if: ${{ vars.BUNDLE_ID_PREFIX != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1); fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install XcodeGen and xcbeautify
+        run: brew install xcodegen xcbeautify
+
+      - name: Write App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.ASC_PRIVATE_KEY }}" | base64 --decode > ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+          chmod 600 ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Bump build number
+        run: |
+          BUILD=$(( ${{ github.run_number }} ))
+          sed -i '' "s/CURRENT_PROJECT_VERSION: \"[0-9]*\"/CURRENT_PROJECT_VERSION: \"$BUILD\"/" project.yml
+          xcodegen generate
+
+      - name: Archive (cloud signing via API key)
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Fog.xcodeproj -scheme Fog \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -archivePath build/Fog.xcarchive \
+            -allowProvisioningUpdates \
+            -allowProvisioningDeviceRegistration \
+            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
+            | tee archive.log | xcbeautify || (tail -200 archive.log; exit 1)
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/Fog.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist scripts/ci/ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }}
+
+      - name: Upload to TestFlight
+        run: |
+          xcrun altool --upload-app -f build/export/Fog.ipa -t ios \
+            --apiKey ${{ secrets.ASC_KEY_ID }} --apiIssuer ${{ secrets.ASC_ISSUER_ID }}
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: archive-log
+          path: archive.log

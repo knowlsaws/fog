@@ -1,0 +1,55 @@
+name: ios-build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  BUNDLE_ID_PREFIX: ${{ vars.BUNDLE_ID_PREFIX || 'com.example' }}
+  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || 'XXXXXXXXXX' }}
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1); fi
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install XcodeGen and xcbeautify
+        run: brew install xcodegen xcbeautify
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Fog.xcodeproj -scheme Fog
+
+      - name: Build for simulator (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Fog.xcodeproj -scheme Fog \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            | tee build.log | xcbeautify || (tail -200 build.log; exit 1)
+
+      - name: Core tests on macOS
+        working-directory: Packages/Core
+        run: swift test
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-log
+          path: build.log

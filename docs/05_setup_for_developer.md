@@ -1,0 +1,57 @@
+# 開発者（人間）の初期設定
+
+Claude Code がループを回し始める前に、一度だけ必要な作業。順番通りに進める。
+所要: 30〜60分（Apple 側の反映待ちを含む）。すべて iPad のブラウザでできる。
+
+## 1. GitHub（5分）
+
+1. リポジトリ `knowlsaws/fog` の Settings → Secrets and variables → Actions
+2. **Variables** タブに追加
+   - `BUNDLE_ID_PREFIX` = 逆ドメイン（例 `jp.knowlsaws`）。バンドル ID は `{prefix}.fog` と `{prefix}.fog.widgets` になる
+3. **Secrets** タブに追加（手順 2〜3 で取得した値）
+   - `APPLE_TEAM_ID`
+   - `ASC_KEY_ID`
+   - `ASC_ISSUER_ID`
+   - `ASC_PRIVATE_KEY`（.p8 の中身を base64 にしたもの。iPad なら Shortcuts の「Base64 エンコード」で可）
+4. Settings → Actions → General → Workflow permissions を「Read and write」にする（Claude Code が PR を作るため）
+
+Secrets が揃うまで `testflight` ワークフローは自動でスキップされる（`BUNDLE_ID_PREFIX` が空なら動かない）。`ios-build` と `core-tests` は Secrets なしで動く。
+
+## 2. Apple Developer（15分 + 反映待ち）
+
+developer.apple.com → Certificates, Identifiers & Profiles
+
+1. **Team ID** を控える（Membership details）→ Secret `APPLE_TEAM_ID`
+2. **Identifiers → App IDs** を2つ作る
+   - `{prefix}.fog`（App）: Capabilities で **WeatherKit**, **iCloud**（CloudKit, コンテナ `iCloud.{prefix}.fog` を新規作成）, **App Groups**（`group.{prefix}.fog` を新規作成）, **Push Notifications** を有効化
+   - `{prefix}.fog.widgets`（App）: **App Groups**（同じグループ）
+3. **Services → WeatherKit** を有効化（App ID 側だけでなく、Services タブでも ON にする。反映に最大30分）
+4. 証明書・プロファイルは作らなくてよい（CI が API キーで自動生成する）
+
+## 3. App Store Connect（10分）
+
+appstoreconnect.apple.com
+
+1. **Users and Access → Integrations → App Store Connect API** で **Team キー**を作成。Access は **App Manager**
+   - Key ID → Secret `ASC_KEY_ID`
+   - Issuer ID → Secret `ASC_ISSUER_ID`
+   - .p8 をダウンロード（1回しかできない）→ base64 → Secret `ASC_PRIVATE_KEY`
+2. **Apps → ＋ → 新規 App**：プラットフォーム iOS、名前は仮で「Fog」、バンドル ID `{prefix}.fog`、SKU は任意
+3. 自分を **TestFlight 内部テスター**に追加（App → TestFlight → 内部テスト → グループ作成 → 自分を追加）
+4. iPhone に **TestFlight アプリ**を入れておく
+
+## 4. 最初のループを始める
+
+1. Claude Code で `knowlsaws/fog` を開き、「`docs/03_loop_plan.md` の L0 を始めて」と指示する
+2. L0 の PR が来たら、CI が緑であることを確認してマージ
+3. `testflight` ワークフローが走り、10〜20分後に TestFlight に通知が来る。インストールして5タブが出れば L0 完了
+4. 以降は「次のループを始めて」の繰り返し。気づいたことは `feedback` ラベルの Issue にする
+
+## 5. 自分で決めること（いつでもよい）
+
+- アプリの正式名（表示名）。決まったら `project.yml` の `CFBundleDisplayName` を変える
+- 魚種判定の学習用に、過去の釣果写真を `App/Resources/Fixtures/` ではなく **別の場所**（iCloud Drive など）に集めておく。公開リポジトリには上げない。L6 でクラウド経由の取り込み方法を決める
+
+## 6. リポジトリを非公開にするとき
+
+完成後に Settings → General → Danger Zone → Change visibility。Secrets と Actions はそのまま使える。

@@ -1,0 +1,99 @@
+# XcodeGen 定義。`xcodegen generate` で Fog.xcodeproj を生成する（CI が行う。.xcodeproj はコミットしない）
+name: Fog
+options:
+  bundleIdPrefix: ${BUNDLE_ID_PREFIX}
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    DEVELOPMENT_TEAM: ${APPLE_TEAM_ID}
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+packages:
+  Core:
+    path: Packages/Core
+
+targets:
+  Fog:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+      - path: App/Resources
+    dependencies:
+      - package: Core
+      - target: FogWidgets
+        embed: true
+        codeSign: true
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Fog
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSLocationAlwaysAndWhenInUseUsageDescription: 釣り場に着いたら自動で釣行を記録するために、常に位置情報を使います。
+        NSLocationWhenInUseUsageDescription: 釣り場と釣果の位置を記録するために位置情報を使います。
+        NSCameraUsageDescription: 釣れた魚を撮影して記録します。
+        NSPhotoLibraryUsageDescription: 釣行中に撮った写真を釣果として取り込みます。
+        NSMotionUsageDescription: 釣行中の移動量を記録します。
+        UIBackgroundModes: [location, fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers:
+          - ${BUNDLE_ID_PREFIX}.fog.refresh
+    entitlements:
+      path: App/Resources/Fog.entitlements
+      properties:
+        com.apple.developer.weatherkit: true
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.${BUNDLE_ID_PREFIX}.fog
+        com.apple.developer.icloud-services: [CloudKit]
+        com.apple.security.application-groups:
+          - group.${BUNDLE_ID_PREFIX}.fog
+        aps-environment: development
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ${BUNDLE_ID_PREFIX}.fog
+
+  FogWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: App/Widgets
+    dependencies:
+      - package: Core
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    info:
+      path: App/Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Fog
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: App/Widgets/FogWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.${BUNDLE_ID_PREFIX}.fog
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ${BUNDLE_ID_PREFIX}.fog.widgets
+
+schemes:
+  Fog:
+    build:
+      targets:
+        Fog: all
+    run:
+      config: Debug
+    archive:
+      config: Release
