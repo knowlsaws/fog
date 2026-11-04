@@ -1,6 +1,10 @@
 import SwiftUI
 import Core
 
+extension GuideEntry: Identifiable {
+    public var id: String { species }
+}
+
 /// 図鑑（§6）。釣った魚種だけがベストショットのグリッドで並ぶ。この画面だけ縦スクロールを許容する。
 struct GuideView: View {
     @Environment(AppServices.self) private var services
