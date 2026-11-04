@@ -56,50 +56,66 @@ def local(tag: str) -> str:
 
 
 def parse_gml(data: bytes, kind: str) -> list[dict]:
-    """JPGIS 2.1 の GML を、要素名に依存せずに読む。
-    gml:Point の id → 座標を集め、点を参照する要素のうち名前に「港」を含む文字列を持つものを港とする。"""
+    """JPGIS 1.0 / 2.1 の GML を、要素名に依存せずに読む。
+    「Point」を名前に含む要素（gml:Point / jps:GM_Point）の id → 座標を集め、
+    点を参照（xlink:href="#id"）し、かつ名前に「港」を含む文字列を持つ要素を港とする。"""
     try:
         root = ET.fromstring(data)
     except ET.ParseError:
         text = data.decode("shift_jis", "ignore")
+        text = re.sub(r'encoding="[^"]+"', 'encoding="utf-8"', text, count=1)
         root = ET.fromstring(text.encode("utf-8"))
     points: dict[str, tuple[float, float]] = {}
     for el in root.iter():
-        if local(el.tag) == "Point":
-            pid = None
-            for k, v in el.attrib.items():
-                if local(k) == "id":
-                    pid = v
-            pos = None
-            for c in el.iter():
-                if local(c.tag) in ("pos", "coordinates") and c.text:
-                    pos = c.text.strip().replace(",", " ").split()
-                    break
-            if pid and pos and len(pos) >= 2:
+        if "Point" not in local(el.tag):
+            continue
+        pid = next((v for k, v in el.attrib.items() if local(k) == "id"), None)
+        pos = None
+        for c in el.iter():
+            if local(c.tag) in ("pos", "coordinates", "coordinate", "position") and c.text and c.text.strip():
+                pos = c.text.strip().replace(",", " ").split()
+                break
+        if pid and pos and len(pos) >= 2:
+            try:
                 a, b = float(pos[0]), float(pos[1])
-                lat, lon = (a, b) if a < b else (b, a)  # 日本では緯度 < 経度
-                points[pid] = (lat, lon)
+            except ValueError:
+                continue
+            lat, lon = (a, b) if a < b else (b, a)  # 日本では緯度 < 経度
+            points[pid] = (lat, lon)
     out: list[dict] = []
-    for feature in list(root):
+    seen: set[tuple[str, str]] = set()
+    for feature in root.iter():
+        ref = None
         texts: list[str] = []
-        ref: str | None = None
-        pref: str | None = None
+        pref = None
         for c in feature.iter():
-            for k, v in c.attrib.items():
-                if local(k) == "href" and v.startswith("#"):
-                    ref = ref or v[1:]
+            href = next((v for k, v in c.attrib.items() if local(k) == "href"), None)
+            if href and href.startswith("#") and ref is None:
+                ref = href[1:]
             if c.text and c.text.strip():
                 t = c.text.strip()
                 texts.append(t)
-                if local(c.tag).lower().find("administrative") >= 0 and re.fullmatch(r"\d{2,5}", t):
+                if "dministrative" in local(c.tag) and re.fullmatch(r"\d{2,5}", t):
                     pref = t[:2]
         if not ref or ref not in points:
             continue
         name = next((t for t in texts if "港" in t and len(t) <= 20), None)
-        if not name:
+        if not name or (name, ref) in seen:
             continue
+        # 入れ子の親要素（データセット全体など）で同じ組を拾わないよう、直下に点参照を持つ要素だけ
+        if not any(next((v for k, v in c.attrib.items() if local(k) == "href"), "") == "#" + ref for c in feature.iter()):
+            continue
+        seen.add((name, ref))
         lat, lon = points[ref]
         out.append({"name": name, "lat": round(lat, 5), "lon": round(lon, 5), "kind": kind, "pref": pref})
+    if len(out) < 100:
+        # 構造が想定と違うときの診断：要素名の頻度と先頭部分を出す
+        from collections import Counter
+        hist = Counter(local(e.tag) for e in root.iter())
+        print("DIAG tags:", hist.most_common(40), file=sys.stderr)
+        print("DIAG points:", len(points), file=sys.stderr)
+        head = data[:3000].decode("utf-8", "ignore")
+        print("DIAG head:", head, file=sys.stderr)
     return out
 
 
@@ -123,7 +139,7 @@ def main() -> int:
             except zipfile.BadZipFile:
                 print(f"{dataset}: {url} is not a zip", file=sys.stderr)
                 continue
-            names = [n for n in zf.namelist() if n.lower().endswith((".xml", ".gml"))]
+            names = [n for n in zf.namelist() if n.lower().endswith((".xml", ".gml")) and "META" not in n.upper()]
             print(f"{dataset}: {url} → {len(names)} GML file(s): {names[:5]}", file=sys.stderr)
             count_before = len(ports)
             for n in names:
