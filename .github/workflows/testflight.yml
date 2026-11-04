@@ -8,11 +8,19 @@ name: testflight
 #   ASC_PRIVATE_KEY      : 同 .p8 の中身（生テキストでも base64 でも可）
 # 必要な Variables:
 #   BUNDLE_ID_PREFIX     : 例 jp.knowlsaws（バンドル ID は {prefix}.fog になる）
+#
+# 署名は手動署名。配布証明書は scripts/ci/asc_signing.py が App Store Connect API で一度だけ作り、
+# scripts/ci/signing/distribution.p12.enc に暗号化して保存（CI がコミット）し、以後は再利用する。
+# ランナーごとに証明書を作って Apple の上限（Distribution は 3 枚）に当たるのを防ぐため。
+# プロファイル（App Store 用）は実行のたびに API で作り直す。
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 env:
   BUNDLE_ID_PREFIX: ${{ vars.BUNDLE_ID_PREFIX }}
@@ -48,6 +56,31 @@ jobs:
           fi
           chmod 600 ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
 
+      - name: Prepare signing (certificate + profiles via App Store Connect API)
+        id: signing
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          python3 -I scripts/ci/asc_signing.py ensure \
+            --team-id "$APPLE_TEAM_ID" \
+            --target "Fog=${BUNDLE_ID_PREFIX}.fog" \
+            --target "FogWidgets=${BUNDLE_ID_PREFIX}.fog.widgets" \
+            --store scripts/ci/signing \
+            --out build/signing
+
+      - name: Commit the encrypted certificate store (first run or renewal only)
+        if: steps.signing.outputs.store_changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/ci/signing
+          git commit -m "ci: 配布証明書を保存（CI が自動生成、暗号化済み） [skip ci]"
+          if ! git push origin "HEAD:${{ github.ref_name }}"; then
+            echo "::warning::証明書ストアを push できませんでした。次回も新しい証明書が作られ上限に当たるので、Settings → Actions → General → Workflow permissions を Read and write にしてください"
+          fi
+
       - name: Generate project
         run: xcodegen generate
 
@@ -57,7 +90,7 @@ jobs:
           sed -i '' "s/CURRENT_PROJECT_VERSION: \"[0-9]*\"/CURRENT_PROJECT_VERSION: \"$BUILD\"/" project.yml
           xcodegen generate
 
-      - name: Archive (cloud signing via API key)
+      - name: Archive (manual signing)
         run: |
           set -o pipefail
           xcodebuild archive \
@@ -65,11 +98,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -configuration Release \
             -archivePath build/Fog.xcarchive \
-            -allowProvisioningUpdates \
-            -allowProvisioningDeviceRegistration \
-            -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
-            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
-            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
+            -xcconfig build/signing/Signing.xcconfig \
             | tee archive.log | xcbeautify || (tail -200 archive.log; exit 1)
 
       - name: Export IPA
@@ -77,8 +106,7 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath build/Fog.xcarchive \
             -exportPath build/export \
-            -exportOptionsPlist scripts/ci/ExportOptions.plist \
-            -allowProvisioningUpdates \
+            -exportOptionsPlist build/signing/ExportOptions.plist \
             -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
             -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
             -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }}
@@ -87,6 +115,10 @@ jobs:
         run: |
           xcrun altool --upload-app -f build/export/Fog.ipa -t ios \
             --apiKey ${{ secrets.ASC_KEY_ID }} --apiIssuer ${{ secrets.ASC_ISSUER_ID }}
+
+      - name: Remove temporary keychain
+        if: always()
+        run: security delete-keychain ~/Library/Keychains/fog-ci.keychain-db || true
 
       - uses: actions/upload-artifact@v4
         if: failure()

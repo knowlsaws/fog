@@ -3,6 +3,15 @@
 新しい決定は上に追加する。形式：日付 / 決定 / 理由 / 影響範囲。
 Claude Code が設計判断で迷ったら、まずここに「提案」として書き、PR で問う。
 
+## 2026-11-04 L0 feedback: TestFlight の署名を手動署名＋証明書の永続化に変更
+
+| 決定 | 理由 | 影響 |
+| --- | --- | --- |
+| TestFlight のアーカイブは自動署名（cloud signing）をやめ、`scripts/ci/asc_signing.py` が App Store Connect API で作った Apple Distribution 証明書と App Store 用プロファイルで手動署名する | 自動署名は毎回まっさらなランナーに新しい証明書を作り、8回目のビルドで Apple の証明書上限に当たって失敗した（PR #1 マージ後の build 8） | `-allowProvisioningUpdates` は使わない。Development 証明書・プロファイルは不要 |
+| 証明書と秘密鍵は `scripts/ci/signing/distribution.p12.enc` に暗号化して CI がコミットし、以後再利用する。パスフレーズは `ASC_PRIVATE_KEY` の SHA-256 から導出 | Mac がなく .p12 を手で作れない。新しい Secret を増やさずに済む。公開リポジトリでも暗号化済みなら置ける | ワークフローに `contents: write` が必要（Workflow permissions は Read and write 済み） |
+| プロファイルは実行のたびに API で削除→作成する | プロファイルには上限がなく、常に証明書と整合させられる | 名前は `Fog CI AppStore {bundle id}` |
+| 上限に当たったときは `signing-admin` ワークフロー（list / revoke）で開発者が iPad から失効させる | developer.apple.com でも可能だが、ID の一覧と失効を同じ場所で済ませる | 失効は自動では行わない |
+
 ## 2026-11-04 L1 データモデルと永続化
 
 | 決定 | 理由 | 影響 |
