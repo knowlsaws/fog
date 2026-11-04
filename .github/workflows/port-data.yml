@@ -1,0 +1,35 @@
+name: port-data
+
+# 国土数値情報（国土交通省）の漁港・港湾データを取得し、Core 同梱の ports.json を更新してコミットする。
+# Claude Code の実行環境からは nlftp.mlit.go.jp に届かないので CI で行う。年 1 回と手動実行。
+
+on:
+  push:
+    paths: ["scripts/fetch_fishing_ports.py", ".github/workflows/port-data.yml"]
+  workflow_dispatch:
+  schedule:
+    - cron: "41 3 6 1 *"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch MLIT fishing ports and harbors
+        run: |
+          python3 -I scripts/fetch_fishing_ports.py \
+            --out data/ports/ports.json \
+            --core-data Packages/Core/Sources/Core/Data/ports.json
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/ports Packages/Core/Sources/Core/Data
+          if git diff --cached --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "data: 国土数値情報の漁港・港湾データを更新（CI）"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"

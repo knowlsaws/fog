@@ -16,7 +16,7 @@ struct SpotsView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            map
+            map.ignoresSafeArea(edges: .top)
             VStack {
                 HStack {
                     Spacer()
@@ -30,7 +30,6 @@ struct SpotsView: View {
             }
             cards
         }
-        .ignoresSafeArea(edges: .top)
         .onAppear {
             model.attach(services)
             if let first = model.cards.first {
@@ -89,8 +88,8 @@ struct SpotsView: View {
 
     private func roundButton(_ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(DS.Color.textPrimary)
-                .frame(width: 40, height: 40).background(DS.Color.surface.opacity(0.9), in: Circle())
+            Image(systemName: symbol).font(.system(size: 16, weight: .semibold)).foregroundStyle(DS.Color.textPrimary)
+                .frame(width: 44, height: 44).background(DS.Color.panel.opacity(0.95), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
     }

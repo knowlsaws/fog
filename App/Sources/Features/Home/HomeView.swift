@@ -15,10 +15,10 @@ struct HomeView: View {
         GeometryReader { geo in
             VStack(spacing: 0) {
                 header.frame(height: geo.size.height * 0.07)
-                scoreArea.frame(height: geo.size.height * 0.22)
-                chipsRow.frame(height: geo.size.height * 0.12)
-                eventsRow.frame(height: geo.size.height * 0.07)
-                ForecastChart(model: model).frame(height: geo.size.height * 0.40)
+                scoreArea.frame(height: geo.size.height * 0.19)
+                chipsRow.frame(height: geo.size.height * 0.11)
+                eventsRow.frame(height: geo.size.height * 0.06)
+                ForecastChart(model: model).frame(height: geo.size.height * 0.47)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, DS.Spacing.l)
@@ -149,7 +149,7 @@ struct HomeView: View {
         HStack(spacing: 0) {
             ForEach(Array(model.events.prefix(3).enumerated()), id: \.element.at) { i, e in
                 if i > 0 { Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1).padding(.vertical, DS.Spacing.s) }
-                Button { model.scrollTarget = e.at } label: {
+                Button { model.show(date: e.at) } label: {
                     VStack(spacing: 2) {
                         Text(e.label).font(DS.Font.caption).foregroundStyle(e.isPositive ? DS.Color.accent : DS.Color.textTertiary)
                         Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(15)).foregroundStyle(e.isPositive ? DS.Color.accent : DS.Color.textPrimary)
@@ -194,23 +194,61 @@ enum MoonSymbol {
     }
 }
 
-/// 1 枚のグラフ：釣れ率のライン（オレンジ、左軸 0〜100）と、その下に潮位の曲線（グレー、満干の時刻付き）。
-/// 時間軸は共有、現在はオレンジの縦線、夜は背景を暗く、予報の無い先は線を薄く。横スクロールとピンチで伸縮。
+/// 先の推移：1 日ずつ表示し、左右スワイプ（または矢印）で日を送る。
+/// 上：釣れ率（オレンジ、左軸 0〜100）と潮位（海の青、満干の時刻）。下：3 時間ごとの天気・気温・雨・風向・風速・波高の表。
 struct ForecastChart: View {
     let model: HomeViewModel
-    @State private var visibleHours: Double = 24
-    @State private var scrollPosition: Date = .now
-
     /// 潮位曲線を置く高さ（釣れ率の目盛りで 4〜40 の帯）
     private let tideBand: ClosedRange<Double> = 4...40
+    private let hours = Array(stride(from: 0, to: 24, by: 3))
 
     var body: some View {
+        GeometryReader { geo in
+            VStack(spacing: DS.Spacing.xs) {
+                dayHeader.frame(height: 22)
+                chart.frame(height: geo.size.height * 0.40)
+                detailTable
+                footer.frame(height: 16)
+            }
+            .padding(.horizontal, DS.Spacing.m)
+            .padding(.vertical, DS.Spacing.s)
+            .frame(width: geo.size.width, height: geo.size.height)
+            .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 30).onEnded { v in
+                if v.translation.width < -30 { step(+1) } else if v.translation.width > 30 { step(-1) }
+            })
+        }
+    }
+
+    private func step(_ d: Int) {
+        let next = model.dayOffset + d
+        guard model.dayOffsetRange.contains(next) else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { model.dayOffset = next }
+    }
+
+    private var dayHeader: some View {
+        HStack {
+            Button { step(-1) } label: { Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).foregroundStyle(model.dayOffset > model.dayOffsetRange.lowerBound ? DS.Color.textSecondary : DS.Color.faded).frame(width: 28, height: 22) }
+                .buttonStyle(.plain)
+            Spacer()
+            HStack(spacing: 6) {
+                Text(model.dayStart, format: .dateTime.month(.defaultDigits).day().weekday(.abbreviated)).font(DS.Font.number(14)).foregroundStyle(DS.Color.textPrimary)
+                Text(model.dayOffset == 0 ? "今日" : (model.dayOffset == 1 ? "明日" : (model.dayOffset == -1 ? "昨日" : ""))).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            }
+            Spacer()
+            Button { step(+1) } label: { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(model.dayOffset < model.dayOffsetRange.upperBound ? DS.Color.textSecondary : DS.Color.faded).frame(width: 28, height: 22) }
+                .buttonStyle(.plain)
+        }
+    }
+
+    private var chart: some View {
         Chart {
             ForEach(dayShading, id: \.0) { (start, end) in
                 RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
                     .foregroundStyle(Color.black.opacity(0.28))
             }
-            ForEach(model.tideCurve) { p in
+            ForEach(model.dayTide) { p in
                 AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("潮位", tideY(p.levelCm)), series: .value("系列", "潮位面"))
                     .foregroundStyle(LinearGradient(colors: [DS.Color.sea.opacity(0.35), DS.Color.sea.opacity(0.02)], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.catmullRom)
@@ -219,12 +257,11 @@ struct ForecastChart: View {
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
             }
-            ForEach(model.tideExtremes, id: \.at) { e in
+            ForEach(model.dayExtremes, id: \.at) { e in
                 PointMark(x: .value("時刻", e.at), y: .value("潮位", tideY(e.levelCm)))
                     .foregroundStyle(DS.Color.textPrimary)
                     .symbolSize(16)
                     .annotation(position: e.kind == .high ? .top : .bottom, spacing: 3) {
-                        // 線と重なっても読めるよう、暗い小さな面に乗せる
                         HStack(spacing: 2) {
                             Text(e.kind == .high ? "満" : "干").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
                             Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(11)).foregroundStyle(DS.Color.textPrimary)
@@ -233,53 +270,90 @@ struct ForecastChart: View {
                         .background(DS.Color.background.opacity(0.85), in: Capsule())
                     }
             }
-            ForEach(model.timeline, id: \.at) { p in
+            ForEach(model.dayTimeline, id: \.at) { p in
                 AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("釣れ率", p.score), series: .value("系列", "釣れ率面"))
-                    .foregroundStyle(LinearGradient(colors: [Color.white.opacity(0.18), Color.white.opacity(0.0)], startPoint: .top, endPoint: .bottom))
+                    .foregroundStyle(LinearGradient(colors: [DS.Color.accent.opacity(0.18), DS.Color.accent.opacity(0.0)], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.catmullRom)
                 LineMark(x: .value("時刻", p.at), y: .value("釣れ率", p.score), series: .value("系列", "釣れ率"))
-                    .foregroundStyle(p.isForecast && model.forecastHorizon.map { p.at > $0 } == true ? Color.white.opacity(0.35) : Color.white.opacity(0.92))
+                    .foregroundStyle(p.isForecast && model.forecastHorizon.map { p.at > $0 } == true ? DS.Color.accent.opacity(0.35) : DS.Color.accent)
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 1.6))
             }
-            RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.secondary).lineStyle(StrokeStyle(lineWidth: 1.5))
+            if model.now >= model.dayStart && model.now <= model.dayEnd {
+                RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.secondary).lineStyle(StrokeStyle(lineWidth: 1.5))
+            }
         }
+        .chartXScale(domain: model.dayStart...model.dayEnd)
         .chartYScale(domain: 0...100)
         .chartYAxis {
-            AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
+            AxisMarks(position: .leading, values: [0, 50, 100]) { value in
                 AxisGridLine().foregroundStyle(DS.Color.faded.opacity(0.5))
                 AxisValueLabel {
-                    if let v = value.as(Int.self) { Text("\(v)").font(DS.Font.number(10)).foregroundStyle(DS.Color.textTertiary) }
+                    if let v = value.as(Int.self) { Text("\(v)").font(DS.Font.number(9)).foregroundStyle(DS.Color.textTertiary) }
                 }
             }
         }
         .chartXAxis {
-            // 6 時間ごとに時刻、0 時には月日（横スクロールしてもいつの情報か分かるように）
-            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
+            AxisMarks(values: .stride(by: .hour, count: 3)) { value in
+                AxisGridLine().foregroundStyle(DS.Color.faded.opacity(0.3))
                 if let d = value.as(Date.self) {
-                    let hour = Calendar.current.component(.hour, from: d)
-                    AxisGridLine().foregroundStyle(hour == 0 ? DS.Color.faded : DS.Color.faded.opacity(0.4))
                     AxisValueLabel(centered: false) {
-                        if hour == 0 {
-                            Text(d, format: .dateTime.month(.defaultDigits).day()).font(DS.Font.number(10)).foregroundStyle(DS.Color.textSecondary)
-                        } else {
-                            Text("\(hour)").font(DS.Font.number(10)).foregroundStyle(DS.Color.textTertiary)
-                        }
+                        Text("\(Calendar.current.component(.hour, from: d))").font(DS.Font.number(9)).foregroundStyle(DS.Color.textTertiary)
                     }
                 }
             }
         }
-        .chartScrollableAxes(.horizontal)
-        .chartXVisibleDomain(length: visibleHours * 3600)
-        .chartScrollPosition(x: $scrollPosition)
-        .padding(DS.Spacing.m)
-        .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
-        .gesture(MagnifyGesture().onChanged { value in
-            visibleHours = min(24 * 7, max(6, 24 / value.magnification))
-        })
-        .onAppear { scrollPosition = model.now.addingTimeInterval(-6 * 3600) }
-        .onChange(of: model.scrollTarget) { _, target in
-            if let target { withAnimation { scrollPosition = target.addingTimeInterval(-visibleHours * 3600 / 2) } }
+    }
+
+    /// 3 時間ごとの詳細（天気・気温・雨・風向・風速・波高）
+    private var detailTable: some View {
+        let cols = model.dayDetail
+        return VStack(spacing: 2) {
+            tableRow("時刻") { i in Text("\(hours[i])").font(DS.Font.number(10)).foregroundStyle(DS.Color.textSecondary) }
+            tableRow("天気") { i in
+                Image(systemName: HomeViewModel.weatherSymbol(cols[i].conditionCode))
+                    .font(.system(size: 12)).symbolRenderingMode(.multicolor)
+                    .foregroundStyle(cols[i].conditionCode == nil ? DS.Color.faded : DS.Color.textPrimary)
+            }
+            tableRow("気温") { i in Text(cols[i].airTemperatureC.map { "\(Int($0.rounded()))°" } ?? "—").font(DS.Font.number(10)).foregroundStyle(DS.Color.textPrimary) }
+            tableRow("雨") { i in Text(cols[i].precipitationMM.map { $0 < 0.05 ? "0" : String(format: "%.1f", $0) } ?? "—").font(DS.Font.number(10)).foregroundStyle((cols[i].precipitationMM ?? 0) > 0.5 ? DS.Color.sea : DS.Color.textSecondary) }
+            tableRow("風向") { i in
+                VStack(spacing: 0) {
+                    Image(systemName: "location.north.fill").font(.system(size: 9, weight: .bold))
+                        .rotationEffect(.degrees((cols[i].windDirectionDeg ?? 0) + 180))
+                        .foregroundStyle(cols[i].windDirectionDeg == nil ? DS.Color.faded : DS.Color.textPrimary)
+                    Text(cols[i].windDirectionDeg.map { HomeViewModel.compass($0) } ?? "").font(.system(size: 8)).foregroundStyle(DS.Color.textTertiary)
+                }
+            }
+            tableRow("風速") { i in Text(cols[i].windSpeedMS.map { String(format: "%.1f", $0) } ?? "—").font(DS.Font.number(10)).foregroundStyle((cols[i].windSpeedMS ?? 0) > 8 ? DS.Color.accent : DS.Color.textPrimary) }
+            tableRow("波高") { i in Text(cols[i].waveHeightM.map { String(format: "%.1fm", $0) } ?? "—").font(DS.Font.number(10)).foregroundStyle(DS.Color.textPrimary) }
+        }
+    }
+
+    private func tableRow<C: View>(_ label: String, @ViewBuilder cell: @escaping (Int) -> C) -> some View {
+        HStack(spacing: 0) {
+            Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).frame(width: 30, alignment: .leading)
+            ForEach(0..<hours.count, id: \.self) { i in
+                Group {
+                    if i < model.dayDetail.count { cell(i) } else { Text("—").font(DS.Font.caption).foregroundStyle(DS.Color.faded) }
+                }
+                .frame(maxWidth: .infinity)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private var footer: some View {
+        HStack {
+            HStack(spacing: 4) {
+                Image(systemName: "thermometer.medium").font(.system(size: 10)).foregroundStyle(DS.Color.sea)
+                Text(model.seaSurfaceTempC.map { String(format: "水温 %.1f°", $0) } ?? "水温 —").font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
+            }
+            Spacer()
+            if let n = model.nextFetchAt {
+                Text("次回更新 ").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) + Text(n, format: .dateTime.hour().minute()).font(DS.Font.number(10)).foregroundStyle(DS.Color.textTertiary)
+            }
         }
     }
 
@@ -296,7 +370,7 @@ struct ForecastChart: View {
         return lo...hi
     }
 
-    /// 夜の区間（日の入〜翌日の出）
+    /// 夜の区間（日の入〜翌日の出）。表示中の日に重なるものだけ
     private var dayShading: [(Date, Date)] {
         var out: [(Date, Date)] = []
         let days = model.sunTimesByDay
@@ -306,7 +380,10 @@ struct ForecastChart: View {
             out.append((sunset, nextRise ?? sunset.addingTimeInterval(12 * 3600)))
         }
         if let first = days.first?.sunrise { out.append((model.rangeStart, first)) }
-        return out
+        return out.compactMap { (s, e) in
+            let a = max(s, model.dayStart), b = min(e, model.dayEnd)
+            return a < b ? (a, b) : nil
+        }
     }
 }
 

@@ -481,7 +481,15 @@ struct SourcesSettingsView: View {
                         .settingsRow()
                     }
                     Text("潮汐: 気象庁 潮位表（分潮）").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).settingsRow()
-                } header: { SectionLabel(text: "海況・潮汐") }
+                    Link(destination: URL(string: "https://nlftp.mlit.go.jp/ksj/")!) {
+                        HStack {
+                            Text("漁港・港湾: 国土数値情報（国土交通省）").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                        }
+                    }
+                    .settingsRow()
+                } header: { SectionLabel(text: "海況・潮汐・港") }
                 Section {
                     Text("RSS の登録は F-27（L17）で追加します。").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
                 } header: { SectionLabel(text: "釣果情報") }
