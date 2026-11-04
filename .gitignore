@@ -28,3 +28,6 @@ Package.resolved
 
 # Python
 __pycache__/
+
+# ワークツリー
+.worktrees/
