@@ -39,6 +39,7 @@ public struct EnvSnapshotBuilder: Sendable {
         env.pressureHPa = w(\.pressureHPa)
         env.cloudCover = w(\.cloudCover)
         env.precipitationMM = w(\.precipitationMM)
+        env.precipitationChance = w(\.precipitationChance)
         env.visibilityM = w(\.visibilityM)
         if let nearest = Series.nearest(inputs.weather, at: date, time: \.at) {
             env.conditionCode = nearest.conditionCode

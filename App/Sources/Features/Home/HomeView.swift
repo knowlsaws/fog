@@ -328,6 +328,11 @@ struct ForecastChart: View {
                 RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
                     .foregroundStyle(Color.black.opacity(0.28))
             }
+            // 潮止まりの帯（満干の前後 30 分、薄いグレー）。文字なし
+            ForEach(model.dayExtremes, id: \.at) { e in
+                RectangleMark(xStart: .value("s", e.at.addingTimeInterval(-30 * 60)), xEnd: .value("e", e.at.addingTimeInterval(30 * 60)), yStart: .value("y0", 0), yEnd: .value("y1", 100))
+                    .foregroundStyle(Color.white.opacity(0.07))
+            }
             // 朝マズメ・夕マズメの帯（薄いオレンジ）。上端に名前
             ForEach(twilightBands, id: \.start) { b in
                 RectangleMark(xStart: .value("s", b.start), xEnd: .value("e", b.end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
@@ -444,7 +449,11 @@ struct ForecastChart: View {
                     .foregroundStyle(cols[i].conditionCode == nil ? DS.Color.faded : DS.Color.textPrimary)
             }
             tableRow("気温") { i in Text(cols[i].airTemperatureC.map { "\(Int($0.rounded()))°" } ?? "—").font(DS.Font.number(10)).foregroundStyle(DS.Color.textPrimary) }
-            tableRow("雨") { i in Text(cols[i].precipitationMM.map { $0 < 0.05 ? "0" : String(format: "%.1f", $0) } ?? "—").font(DS.Font.number(10)).foregroundStyle((cols[i].precipitationMM ?? 0) > 0.5 ? DS.Color.sea : DS.Color.textSecondary) }
+            tableRow("降水") { i in
+                let chance = cols[i].precipitationChance
+                Text(chance.map { "\(Int(($0 * 100).rounded()))%" } ?? "—").font(DS.Font.number(10))
+                    .foregroundStyle((chance ?? 0) >= 0.5 ? DS.Color.sea : DS.Color.textSecondary)
+            }
             tableRow("風向") { i in
                 VStack(spacing: 0) {
                     Image(systemName: "location.north.fill").font(.system(size: 9, weight: .bold))

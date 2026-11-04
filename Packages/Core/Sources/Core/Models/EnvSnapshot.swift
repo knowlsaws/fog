@@ -17,6 +17,7 @@ public struct EnvSnapshot: Codable, Identifiable, Hashable, Sendable {
     public var pressureHPa: Double?
     public var cloudCover: Double?          // 0〜1
     public var precipitationMM: Double?     // 直近1時間
+    public var precipitationChance: Double? // 降水確率 0〜1
     public var visibilityM: Double?
 
     // 気圧（端末の気圧計）
