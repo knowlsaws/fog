@@ -41,4 +41,5 @@ jobs:
           git add data/tide Packages/Core/Sources/Core/Data Packages/Core/Tests/CoreTests/Fixtures
           if git diff --cached --quiet; then echo "no changes"; exit 0; fi
           git commit -m "data: 気象庁の分潮データと潮位表フィクスチャを更新（CI）"
+          git pull --rebase origin "${{ github.ref_name }}"
           git push origin "HEAD:${{ github.ref_name }}"

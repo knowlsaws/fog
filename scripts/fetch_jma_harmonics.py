@@ -192,43 +192,51 @@ def parse_station_list(page_html, base_url):
     return stations, p
 
 
+SPEEDS = {'Sa': 0.0410686, 'Ssa': 0.0821373, 'Mm': 0.5443747, 'MSf': 1.0158958, 'Mf': 1.0980331, '2Q1': 12.8542862,
+          'σ1': 12.9271398, 'Q1': 13.3986609, 'ρ1': 13.4715145, 'O1': 13.9430356, 'MP1': 14.0251729, 'M1': 14.4920521,
+          'χ1': 14.5695476, 'π1': 14.9178647, 'P1': 14.9589314, 'S1': 15.0, 'K1': 15.0410686, 'ψ1': 15.0821353,
+          'φ1': 15.1232059, 'θ1': 15.5125897, 'J1': 15.5854433, 'SO1': 16.0569644, 'OO1': 16.1391017, 'OQ2': 27.3416965,
+          'MNS2': 27.4238337, '2N2': 27.8953548, 'μ2': 27.9682084, 'N2': 28.4397295, 'ν2': 28.5125831, 'OP2': 28.9019669,
+          'M2': 28.9841042, 'MKS2': 29.0662415, 'λ2': 29.4556253, 'L2': 29.5284789, 'T2': 29.9589333, 'S2': 30.0,
+          'R2': 30.0410667, 'K2': 30.0821373, 'MSN2': 30.5443747, 'KJ2': 30.626512, '2SM2': 31.0158958, 'MO3': 42.9271398,
+          'M3': 43.4761563, 'SO3': 43.9430356, 'MK3': 44.0251729, 'SK3': 45.0410686, 'MN4': 57.4238337, 'M4': 57.9682084,
+          'SN4': 58.4397295, 'MS4': 58.9841042, 'MK4': 59.0662415, 'S4': 60.0, 'SK4': 60.0821373, '2MN6': 86.407938,
+          'M6': 86.9523127, 'MSN6': 87.4238337, '2MS6': 87.9682084, '2MK6': 88.0503457, '2SM6': 88.9841042, 'MSK6': 89.0662415,
+          'M8': 115.9364169, 'MS8': 116.9523127}
+
+TRIPLE_RE = re.compile(r"(\d+\.\d{6,7})\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)")
+LON_RE = re.compile(r"経度\s*(\d{1,3})\s*度\s*(\d{1,2})\s*分\s*(\d{1,2}(?:\.\d+)?)?\s*秒?")
+
+
+def name_for_speed(speed):
+    best = min(SPEEDS.items(), key=lambda kv: abs(kv[1] - speed))
+    return best[0] if abs(best[1] - speed) < 2e-4 else None
+
+
 def parse_harmonics_page(page_html):
-    """分潮一覧表ページ → (Z0, [(name, amp_cm, phase_deg)])。表でもテキストでも拾う。"""
-    text = re.sub(r"<(br|/tr|/p|/div|/li)[^>]*>", "\n", page_html, flags=re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
+    """分潮一覧表ページ → (Z0 or None, 経度 or None, [(name, amp_cm, phase_deg)])。
+    行は「記号 (日本語名) 速度(度/時) 振幅(cm) 遅角(°)」。記号の表記ゆれを避け、速度で分潮を同定する。
+    遅角は現地子午線基準（ページの注記）。"""
+    text = re.sub(r"<[^>]+>", " ", page_html)
     text = html.unescape(text)
-    constituents = []
-    z0 = None
-    for line in text.splitlines():
-        tokens = line.replace("　", " ").split()
-        if not tokens:
+    text = re.sub(r"\s+", " ", text)
+    constituents = {}
+    for m in TRIPLE_RE.finditer(text):
+        speed, amp, ph = float(m.group(1)), float(m.group(2)), float(m.group(3))
+        name = name_for_speed(speed)
+        if name is None:
+            log(f"::warning::未知の速度 {speed} を無視")
             continue
-        joined = " ".join(tokens)
-        if z0 is None and re.search(r"(Z0|Ｚ０|平均水面|MSL)", joined, re.I):
-            m = re.search(r"(-?\d+(?:\.\d+)?)\s*(cm|ｃｍ)?", re.sub(r"(Z0|Ｚ０|平均水面|MSL)", "", joined, flags=re.I))
-            if m:
-                z0 = float(m.group(1))
-        # 行内に「名前 振幅 遅角」の組が複数並ぶこともある
-        i = 0
-        while i < len(tokens) - 2:
-            name = canonical(tokens[i])
-            if name:
-                try:
-                    amp = float(tokens[i + 1])
-                    ph = float(tokens[i + 2])
-                except ValueError:
-                    i += 1
-                    continue
-                if 0 <= amp < 1000 and -360 <= ph <= 360:
-                    constituents.append((name, amp, ph % 360))
-                    i += 3
-                    continue
-            i += 1
-    # 重複は最後を採用
-    seen = {}
-    for n, a, p_ in constituents:
-        seen[n] = (a, p_)
-    return z0, [(n, a, p_) for n, (a, p_) in seen.items()]
+        constituents[name] = (amp, ph % 360)
+    z0 = None
+    mz = re.search(r"(平均水面|Z0|Ｚ０)[^0-9-]{0,20}(-?\d+(?:\.\d+)?)", text)
+    if mz:
+        z0 = float(mz.group(2))
+    lon = None
+    ml = LON_RE.search(text)
+    if ml:
+        lon = int(ml.group(1)) + int(ml.group(2)) / 60 + (float(ml.group(3)) if ml.group(3) else 0) / 3600
+    return z0, lon, [(n, a, p_) for n, (a, p_) in constituents.items()]
 
 
 def main():
@@ -288,27 +296,31 @@ def main():
         count += 1
         constituents = []
         z0 = None
+        page_lon = None
         if s["harmonicsURL"]:
             try:
                 hp = fetch(s["harmonicsURL"])
-                z0, cons = parse_harmonics_page(hp)
+                z0, page_lon, cons = parse_harmonics_page(hp)
                 constituents = [{"name": n, "amplitudeCm": a, "phaseLagDeg": p_} for n, a, p_ in cons]
                 if len(cons) < 10 or count == 1:
                     if len(cons) < 10:
                         log(f"::warning::{s['name']}({s['id']}): 分潮 {len(cons)} 個しか解析できず: {s['harmonicsURL']}")
-                    snippet = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", hp))[:900]
-                    log(f"  {s['name']}: z0={z0} cons={len(cons)} snippet: {snippet}")
+                    snippet = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", hp)))
+                    idx = snippet.find("60分潮")
+                    log(f"  {s['name']}: z0={z0} lon={page_lon} cons={len(cons)} snippet: {snippet[max(0, idx - 300):idx + 200]} ... {snippet[-500:]}")
                 time.sleep(0.3)
             except Exception as e:  # noqa: BLE001
                 log(f"::warning::{s['name']}({s['id']}): 分潮ページ取得失敗 {e}")
         if z0 is None:
             z0 = s.get("z0FromList") or 0.0
+        # 遅角は現地子午線基準：経度 × 240 秒の時差で天文引数を評価する
+        lon_for_phase = page_lon if page_lon is not None else s["longitude"]
         out_stations.append({
             "id": s["id"], "name": s["name"],
             "coordinate": {"latitude": round(s["latitude"], 5), "longitude": round(s["longitude"], 5)},
             "meanSeaLevelCm": z0,
             "constituents": constituents,
-            "utcOffsetSeconds": 32400,
+            "utcOffsetSeconds": int(round(lon_for_phase * 240)),
         })
 
     result = {"year": args.year, "source": list_url, "stations": out_stations}

@@ -89,7 +89,8 @@ final class AstroTests: XCTestCase {
     func testTideNameFromMoonAge() {
         XCTAssertEqual(TideName.from(moonAge: 0.5), .spring)
         XCTAssertEqual(TideName.from(moonAge: 7.5), .neap)
-        XCTAssertEqual(TideName.from(moonAge: 10.2), .long)
-        XCTAssertEqual(TideName.from(moonAge: 11.4), .young)
+        // 旧暦 10 日（月齢 9.x）が長潮、11 日（月齢 10.x）が若潮
+        XCTAssertEqual(TideName.from(moonAge: 9.5), .long)
+        XCTAssertEqual(TideName.from(moonAge: 10.4), .young)
     }
 }

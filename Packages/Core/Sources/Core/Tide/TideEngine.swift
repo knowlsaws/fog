@@ -18,7 +18,7 @@ public struct TideStation: Codable, Identifiable, Hashable, Sendable {
     /// Z0（潮位表基準面から平均水面までの高さ、cm）
     public var meanSeaLevelCm: Double
     public var constituents: [TidalConstituent]
-    /// 遅角の基準となる時差（秒）。気象庁は日本標準時（+9h）
+    /// 遅角の基準となる時差（秒）。気象庁の分潮一覧表は「現地子午線基準」なので経度 × 240 秒（135°E なら +9h）
     public var utcOffsetSeconds: Int
 
     public init(id: String, name: String, coordinate: Coordinate, meanSeaLevelCm: Double, constituents: [TidalConstituent], utcOffsetSeconds: Int = 9 * 3600) {

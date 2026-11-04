@@ -66,7 +66,8 @@ final class TideEngineTests: XCTestCase {
     func testJMATideTableParser() {
         var line = ""
         for h in 0..<24 { line += String(format: "%3d", 100 + h) }
-        line += "261018HK" + "0612 180" + "1830 175" + "9999 999" + "9999 999" + "0030  20" + "1245  25" + "9999 999" + "9999 999"
+        // 満潮・干潮は「時刻4桁＋潮位3桁」の 7 桁 × 4 組
+        line += "261018HK" + "0612180" + "1830175" + "9999999" + "9999999" + "0030 20" + "1245 25" + "9999999" + "9999999"
         let days = JMATideTableParser.parse(line + "\n")
         XCTAssertEqual(days.count, 1)
         let d = days[0]
