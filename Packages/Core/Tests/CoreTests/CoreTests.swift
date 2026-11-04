@@ -1,18 +1,6 @@
 import XCTest
 @testable import Core
 
-final class ModelsTests: XCTestCase {
-    func testSessionRoundTripsThroughJSON() throws {
-        let spot = Spot(name: "函館港", coordinate: .init(latitude: 41.78, longitude: 140.72))
-        var session = Session(spotID: spot.id, startedAt: Date(timeIntervalSince1970: 1_700_000_000))
-        session.catches.append(Catch(sessionID: session.id, at: session.startedAt.addingTimeInterval(1800),
-                                     coordinate: spot.coordinate, species: "アイナメ", speciesConfidence: 0.92, lengthCm: 38))
-        let data = try JSONEncoder().encode(session)
-        let decoded = try JSONDecoder().decode(Session.self, from: data)
-        XCTAssertEqual(decoded, session)
-    }
-}
-
 final class TideNameTests: XCTestCase {
     func testNewMoonIsSpringTide() {
         XCTAssertEqual(TideName.from(moonAge: 0.5), .spring)

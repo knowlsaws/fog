@@ -1,0 +1,141 @@
+{
+  "activity": {
+    "stepCount": 1850,
+    "walkingDistanceM": 1200
+  },
+  "catches": [
+    {
+      "at": "2026-10-17T21:12:00.000Z",
+      "coordinate": {
+        "latitude": 41.7822,
+        "longitude": 140.7192
+      },
+      "env": {
+        "airTemperatureC": 11.5,
+        "at": "2026-10-17T21:12:00.000Z",
+        "cloudCover": 0.4,
+        "conditionCode": "partlyCloudy",
+        "coordinate": {
+          "latitude": 41.7822,
+          "longitude": 140.7192
+        },
+        "humidity": 0.78,
+        "id": "D0000000-0000-4000-8000-000000000002",
+        "isForecast": false,
+        "measuredPressureHPa": 1013.9,
+        "moonAge": 7.1,
+        "precipitationMM": 0,
+        "pressureHPa": 1014.2,
+        "pressureTrend3hHPa": -0.8,
+        "seaSurfaceTempC": 15.8,
+        "tideLevelCm": 62,
+        "tideName": "中潮",
+        "tideRateCmPerHour": 9.5,
+        "waveHeightM": 0.3,
+        "wavePeriodS": 4.2,
+        "windDirectionDeg": 300,
+        "windGustMS": 4.1,
+        "windSpeedMS": 2.4
+      },
+      "id": "C0000000-0000-4000-8000-000000000001",
+      "lengthCm": 38,
+      "lengthErrorCm": 1.5,
+      "photoLocalIdentifiers": [],
+      "pointID": "A0000000-0000-4000-8000-000000000002",
+      "released": true,
+      "rigID": "F0000000-0000-4000-8000-000000000002",
+      "sessionID": "B0000000-0000-4000-8000-000000000001",
+      "species": "アイナメ",
+      "speciesCandidates": [
+        {
+          "confidence": 0.92,
+          "species": "アイナメ"
+        },
+        {
+          "confidence": 0.05,
+          "species": "クジメ"
+        },
+        {
+          "confidence": 0.02,
+          "species": "ホッケ"
+        }
+      ],
+      "speciesConfidence": 0.92,
+      "speciesCorrected": false,
+      "tackle": "bait",
+      "tackleID": "F0000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "endedAt": "2026-10-17T23:10:00.000Z",
+  "hookEvents": [
+    {
+      "at": "2026-10-17T21:40:00.000Z",
+      "coordinate": {
+        "latitude": 41.7822,
+        "longitude": 140.7192
+      },
+      "id": "E0000000-0000-4000-8000-000000000001",
+      "kind": "lost",
+      "pointID": "A0000000-0000-4000-8000-000000000002",
+      "rigID": "F0000000-0000-4000-8000-000000000002",
+      "sessionID": "B0000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "id": "B0000000-0000-4000-8000-000000000001",
+  "isAutoDetected": true,
+  "report": {
+    "body": "ダミー釣行です。L8 で Foundation Models が生成します。",
+    "generatedAt": "2026-10-17T23:10:00.000Z",
+    "summary": "上げ潮の朝マズメに1尾"
+  },
+  "rigID": "F0000000-0000-4000-8000-000000000002",
+  "snapshots": [
+    {
+      "airTemperatureC": 11.5,
+      "at": "2026-10-17T20:30:00.000Z",
+      "cloudCover": 0.4,
+      "conditionCode": "partlyCloudy",
+      "coordinate": {
+        "latitude": 41.7822,
+        "longitude": 140.7192
+      },
+      "humidity": 0.78,
+      "id": "D0000000-0000-4000-8000-000000000001",
+      "isForecast": false,
+      "measuredPressureHPa": 1013.9,
+      "moonAge": 7.1,
+      "precipitationMM": 0,
+      "pressureHPa": 1014.2,
+      "pressureTrend3hHPa": -0.8,
+      "seaSurfaceTempC": 15.8,
+      "tideLevelCm": 62,
+      "tideName": "中潮",
+      "tideRateCmPerHour": 9.5,
+      "waveHeightM": 0.3,
+      "wavePeriodS": 4.2,
+      "windDirectionDeg": 300,
+      "windGustMS": 4.1,
+      "windSpeedMS": 2.4
+    }
+  ],
+  "spotID": "A0000000-0000-4000-8000-000000000001",
+  "startedAt": "2026-10-17T20:30:00.000Z",
+  "tackle": "bait",
+  "tackleID": "F0000000-0000-4000-8000-000000000001",
+  "track": [
+    {
+      "at": "2026-10-17T20:30:00.000Z",
+      "coordinate": {
+        "latitude": 41.7822,
+        "longitude": 140.7192
+      }
+    },
+    {
+      "at": "2026-10-17T21:12:00.000Z",
+      "coordinate": {
+        "latitude": 41.7824,
+        "longitude": 140.7195
+      }
+    }
+  ]
+}

@@ -3,6 +3,22 @@
 新しい決定は上に追加する。形式：日付 / 決定 / 理由 / 影響範囲。
 Claude Code が設計判断で迷ったら、まずここに「提案」として書き、PR で問う。
 
+## 2026-11-04 L1 データモデルと永続化
+
+| 決定 | 理由 | 影響 |
+| --- | --- | --- |
+| Core の値型は型ごとに1ファイル（`Models/*.swift`）。9型すべて `Codable, Hashable, Sendable`、`Identifiable` | L1 の成果物定義どおり。JSON の往復テストと SwiftData との相互変換を型単位で追える | `Models.swift` は分割して削除 |
+| JSON は `FogJSON`（ISO 8601 UTC ミリ秒、キーソート）に統一 | エクスポート／インポート（F-23）とフィクスチャ、SwiftData 内の埋め込み値で同じ表現を使う | 日付は `Date` の秒未満を ms に丸める |
+| SwiftData のレコードは Core と別の型（`*Record`）にし、`uuid` 列で Core の `id` を持つ | `PersistentModel` の `id` と衝突させない。Core は Foundation だけに依存させる | 画面・サービスは `FogStore` を通して Core の値型で読み書きする |
+| CloudKit 対応の制約を全レコードに適用：全属性に既定値、リレーションは optional、`.unique` なし | SwiftData の CloudKit 同期の要件 | 一意性は `FogStore` の upsert で保証する |
+| 配列・入れ子（候補3種、写真ID一覧、軌跡、釣果時の環境）は JSON の `Data?` で埋め込む | CloudKit で配列属性を避ける。釣果時の環境は不変のスナップショットで、分析は Core 側で行うので行に分ける必要がない | 釣行中の定期スナップショットだけは時系列に引くため `EnvSnapshotRecord` として行にする |
+| ストアは App Group コンテナ（`group.{prefix}.fog`）に置く。取れなければ Application Support | L14 のウィジェットから同じストアを読むため | シミュレータ（未署名）でも動く |
+| CloudKit は Info.plist の `FogCloudKitContainerIdentifier`（`project.yml` の `iCloud.${BUNDLE_ID_PREFIX}.fog`）と iCloud サインイン状態が揃ったときだけ有効。失敗したらローカル → メモリ内へ落とす | 開発者がコンテナを作る前でもアプリは動く（L1 受け入れ条件）。起動を止めない | `UIBackgroundModes` に `remote-notification` を追加（CloudKit のプッシュ同期） |
+| 分析は保存データから毎回導出する。計算結果を持つときは `AnalysisCache` 経由にし、`FogStore.revision` が進んだら全部捨てる | 削除が分析に即時反映される（§6） | L7・L8 は `AnalysisCache.value(_:store:compute:)` を使う |
+| 初回起動時にダミー釣行（函館港・アイナメ 38cm）を1件シードする。消されても再シードしない | L1 受け入れ条件「再起動後も残る」を TestFlight で確認するため | L11（長押し削除）か L15（全データ削除）で開発者が消せる。シードのコードは L16 までに外す |
+| 釣果・釣行は `tackle: TackleKind?`（種別）と `tackleID: UUID?`（登録タックル）の両方を持つ | タックル未登録でもウィジェットの「スピニング／ベイト」切替が成立する（F-14 の例外的入力は未入力でも記録が成立する原則） | 登録タックルは種別の補足情報 |
+| 魚種は `Species.initialCatalog`（docs/species.md）を Core に持ち、起動時に `SpeciesRecord` へマージする | 判定モデル（L6）が同じリストを使う。釣果は標準和名の文字列で参照する | L6 でリストを更新するときは Core と docs/species.md を同時に直す |
+
 ## 2026-11-04 初期決定（要件・UI 確定時）
 
 | 決定 | 理由 | 影響 |
