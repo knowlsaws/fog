@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 
 /// GPX（trkpt）の最小パーサ。位置シミュレーションのテストと、開発者が実機ログを読み込むのに使う。
 public enum GPX {
