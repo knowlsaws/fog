@@ -42,22 +42,28 @@ struct HomeView: View {
     // MARK: ヘッダー
 
     private var header: some View {
-        HStack(spacing: DS.Spacing.s) {
-            if model.isRecording {
-                PulsingDot()
+        HStack(alignment: .top, spacing: DS.Spacing.s) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: DS.Spacing.s) {
+                    if model.isRecording { PulsingDot() }
+                    Button { showSpots = true } label: {
+                        HStack(spacing: 6) {
+                            Text(model.spot?.name ?? "釣り場").font(.system(size: 24, weight: .bold)).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
+                            Image(systemName: "location.north.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(DS.Color.textSecondary).rotationEffect(.degrees(45))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text(model.now, format: .dateTime.hour().minute()).font(DS.Font.number(14)).foregroundStyle(DS.Color.textTertiary)
             }
-            Button { showSpots = true } label: {
-                Text(model.spot?.name ?? "釣り場").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
-            }
-            .buttonStyle(.plain)
-            Text(model.now, format: .dateTime.hour().minute()).font(DS.Font.number(13)).foregroundStyle(DS.Color.textTertiary)
             Spacer()
-            Image(systemName: MoonSymbol.name(age: model.moonAge)).font(.system(size: 16)).foregroundStyle(DS.Color.textSecondary)
+            Image(systemName: MoonSymbol.name(age: model.moonAge)).font(.system(size: 20)).foregroundStyle(DS.Color.moon).frame(height: 32)
             Button { showSettings = true } label: {
-                Image(systemName: "gearshape.fill").font(.system(size: 16)).foregroundStyle(DS.Color.textSecondary)
+                Image(systemName: "gearshape").font(.system(size: 20)).foregroundStyle(DS.Color.textSecondary).frame(height: 32)
             }
             .buttonStyle(.plain)
         }
+        .padding(.top, DS.Spacing.s)
     }
 
     // MARK: 釣れ率
@@ -67,13 +73,16 @@ struct HomeView: View {
             ZStack {
                 // 円は常に画面中央（魚種別の数字があっても動かさない）
                 ZStack {
-                    Circle().stroke(DS.Color.faded, lineWidth: 10)
-                    Circle().trim(from: 0, to: CGFloat(model.score?.score ?? 0) / 100)
-                        .stroke(model.score?.isForecast == true ? DS.Color.accent.opacity(0.6) : DS.Color.accent, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
+                    // 下が開いた 270° のゲージ（確定画像）。トラックは暗いグレー
+                    Circle().trim(from: 0, to: 0.75)
+                        .stroke(Color.white.opacity(0.16), style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(135))
+                    Circle().trim(from: 0, to: 0.75 * CGFloat(model.score?.score ?? 0) / 100)
+                        .stroke(model.score?.isForecast == true ? DS.Color.accent.opacity(0.6) : DS.Color.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(135))
                         .animation(.easeOut(duration: 0.6), value: model.score?.score)
                     Text("\(model.score?.score ?? 0)")
-                        .font(DS.Font.score(72))
+                        .font(DS.Font.score(76))
                         .foregroundStyle(DS.Color.textPrimary)
                         .contentTransition(.numericText())
                 }
@@ -82,15 +91,15 @@ struct HomeView: View {
                 if !model.speciesScores.isEmpty {
                     HStack {
                         Spacer()
-                        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                        VStack(alignment: .leading, spacing: DS.Spacing.s) {
                             ForEach(model.speciesScores, id: \.species) { s in
-                                HStack(spacing: DS.Spacing.s) {
-                                    Text("\(s.score)").font(DS.Font.number(18)).foregroundStyle(DS.Color.textPrimary)
-                                    Text(s.species).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                                HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.s) {
+                                    Text("\(s.score)").font(DS.Font.number(22)).foregroundStyle(DS.Color.textPrimary)
+                                    Text(s.species).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
                                 }
                             }
                         }
-                        .frame(width: 96, alignment: .leading)
+                        .frame(width: 100, alignment: .leading)
                     }
                 }
             }
@@ -105,49 +114,57 @@ struct HomeView: View {
         HStack(spacing: DS.Spacing.s) {
             ForEach(model.chips) { chip in
                 Button { chipDetail = chip } label: {
-                    VStack(spacing: 2) {
+                    VStack(spacing: 3) {
                         Image(systemName: chip.symbol)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(iconColor(chip))
                             .rotationEffect(chip.kind == .wind ? .degrees((model.windDirectionDeg ?? 0) + 180) : .zero)
-                            .frame(height: 18)
-                        Text(chip.value).font(DS.Font.number(17)).lineLimit(1).minimumScaleFactor(0.6)
-                        Text(chip.label).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1).minimumScaleFactor(0.7)
+                            .frame(height: 22)
+                        Text(chip.value).font(DS.Font.number(19)).foregroundStyle(DS.Color.textPrimary).lineLimit(1).minimumScaleFactor(0.6)
+                        Text(chip.label).font(.system(size: 10, weight: .medium)).foregroundStyle(DS.Color.textTertiary).lineLimit(1).minimumScaleFactor(0.7)
                     }
-                    .foregroundStyle(color(chip.tone))
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.vertical, DS.Spacing.s)
                     .padding(.horizontal, DS.Spacing.xs)
-                    .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
+                    .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
         }
     }
 
-    private func color(_ tone: HomeViewModel.Chip.Tone) -> Color {
-        switch tone {
-        case .good: return DS.Color.accent
-        case .normal: return DS.Color.textPrimary
-        case .bad: return DS.Color.textTertiary
+    /// アイコンの色（確定画像：潮と光はオレンジ、風は緑、天気は白。悪い状態はグレー）
+    private func iconColor(_ chip: HomeViewModel.Chip) -> Color {
+        if chip.tone == .bad { return DS.Color.textTertiary }
+        switch chip.kind {
+        case .tide, .light: return DS.Color.accent
+        case .wind: return DS.Color.secondary
+        case .weather: return DS.Color.textPrimary
         }
     }
 
     // MARK: 次（イベント列）
 
     private var eventsRow: some View {
-        HStack(spacing: DS.Spacing.m) {
-            ForEach(model.events, id: \.at) { e in
+        HStack(spacing: 0) {
+            ForEach(Array(model.events.prefix(3).enumerated()), id: \.element.at) { i, e in
+                if i > 0 { Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1).padding(.vertical, DS.Spacing.s) }
                 Button { model.scrollTarget = e.at } label: {
-                    HStack(spacing: DS.Spacing.xs) {
-                        Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(13))
-                        Text(e.label).font(DS.Font.caption)
+                    VStack(spacing: 2) {
+                        Text(e.label).font(DS.Font.caption).foregroundStyle(e.isPositive ? DS.Color.accent : DS.Color.textTertiary)
+                        Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(15)).foregroundStyle(e.isPositive ? DS.Color.accent : DS.Color.textPrimary)
                     }
-                    .foregroundStyle(e.isPositive ? DS.Color.accent : DS.Color.textTertiary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .buttonStyle(.plain)
             }
-            Spacer(minLength: 0)
+            if model.events.isEmpty {
+                Text("—").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).frame(maxWidth: .infinity)
+            }
         }
+        .padding(.vertical, DS.Spacing.xs)
+        .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.vertical, DS.Spacing.xs)
     }
 }
 
@@ -191,14 +208,14 @@ struct ForecastChart: View {
         Chart {
             ForEach(dayShading, id: \.0) { (start, end) in
                 RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
-                    .foregroundStyle(DS.Color.surface.opacity(0.5))
+                    .foregroundStyle(Color.black.opacity(0.28))
             }
             ForEach(model.tideCurve) { p in
-                AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("潮位", tideY(p.levelCm)))
-                    .foregroundStyle(DS.Color.textTertiary.opacity(0.12))
+                AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("潮位", tideY(p.levelCm)), series: .value("系列", "潮位面"))
+                    .foregroundStyle(LinearGradient(colors: [DS.Color.secondary.opacity(0.35), DS.Color.secondary.opacity(0.02)], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.catmullRom)
                 LineMark(x: .value("時刻", p.at), y: .value("潮位", tideY(p.levelCm)), series: .value("系列", "潮位"))
-                    .foregroundStyle(DS.Color.textSecondary.opacity(0.8))
+                    .foregroundStyle(DS.Color.secondary)
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
             }
@@ -214,8 +231,11 @@ struct ForecastChart: View {
                     }
             }
             ForEach(model.timeline, id: \.at) { p in
+                AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("釣れ率", p.score), series: .value("系列", "釣れ率面"))
+                    .foregroundStyle(LinearGradient(colors: [Color.white.opacity(0.18), Color.white.opacity(0.0)], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.catmullRom)
                 LineMark(x: .value("時刻", p.at), y: .value("釣れ率", p.score), series: .value("系列", "釣れ率"))
-                    .foregroundStyle(p.isForecast && model.forecastHorizon.map { p.at > $0 } == true ? DS.Color.accent.opacity(0.3) : DS.Color.accent)
+                    .foregroundStyle(p.isForecast && model.forecastHorizon.map { p.at > $0 } == true ? Color.white.opacity(0.35) : Color.white.opacity(0.92))
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 2.5))
             }
@@ -238,6 +258,8 @@ struct ForecastChart: View {
         .chartScrollableAxes(.horizontal)
         .chartXVisibleDomain(length: visibleHours * 3600)
         .chartScrollPosition(x: $scrollPosition)
+        .padding(DS.Spacing.m)
+        .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .gesture(MagnifyGesture().onChanged { value in
             visibleHours = min(72, max(6, 24 / value.magnification))
         })

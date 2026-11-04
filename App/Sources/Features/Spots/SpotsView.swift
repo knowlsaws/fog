@@ -139,45 +139,52 @@ struct SpotCardView: View {
     var onRegister: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.s) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(card.spot.name).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
-                Spacer()
-                Text("\(card.score)").font(DS.Font.score(34)).foregroundStyle(DS.Color.accent)
-            }
-            HStack(spacing: DS.Spacing.m) {
-                Text("\(card.stats.sessions)釣行").font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
-                if let last = card.stats.lastSessionAt {
-                    Text(last, format: .dateTime.month().day()).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-                }
-                Spacer()
-                ForEach(card.stats.topSpecies.prefix(3), id: \.species) { s in
-                    Text(s.species.prefix(2)).font(.system(size: 9, weight: .semibold)).foregroundStyle(DS.Color.background)
-                        .frame(width: 22, height: 22).background(DS.Color.secondary, in: Circle())
-                }
-            }
-            HStack {
-                if !card.spot.isRegistered {
-                    Text("未登録").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-                }
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top) {
+                Text(card.spot.name).font(.system(size: 18, weight: .bold)).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
                 Spacer()
                 if card.isCandidate {
                     Button(action: onRegister) {
                         Label("登録", systemImage: "plus").font(DS.Font.caption).foregroundStyle(DS.Color.background)
-                            .padding(.horizontal, DS.Spacing.m).padding(.vertical, 4).background(DS.Color.accent, in: Capsule())
+                            .padding(.horizontal, 10).padding(.vertical, 4).background(DS.Color.accent, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 } else {
                     Button(action: onSelectHome) {
                         Text("選択").font(DS.Font.caption).foregroundStyle(DS.Color.textPrimary)
-                            .padding(.horizontal, DS.Spacing.m).padding(.vertical, 4).background(DS.Color.surfaceRaised, in: Capsule())
+                            .padding(.horizontal, 10).padding(.vertical, 4).background(DS.Color.surfaceRaised, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
             }
+            Text("釣れ率").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            Text("\(card.score)").font(DS.Font.score(40)).foregroundStyle(DS.Color.textPrimary)
+            Spacer(minLength: 0)
+            HStack(alignment: .center, spacing: DS.Spacing.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "fish.fill").font(.system(size: 11)).foregroundStyle(DS.Color.textTertiary)
+                        Text(card.isCandidate ? "未登録" : "\(card.stats.catches)").font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
+                    }
+                    if let last = card.stats.lastSessionAt {
+                        Text(last, format: .dateTime.year().month().day()).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                    } else {
+                        Text(card.isCandidate ? "地図から見つけた漁港" : "\(card.stats.sessions)釣行").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    ForEach(card.stats.topSpecies.prefix(2), id: \.species) { s in
+                        HStack(spacing: 3) {
+                            Text(s.species).font(.system(size: 9)).foregroundStyle(DS.Color.textTertiary)
+                            Image(systemName: "fish.fill").font(.system(size: 11)).foregroundStyle(DS.Color.textSecondary)
+                        }
+                    }
+                }
+            }
         }
         .padding(DS.Spacing.m)
-        .background(selected ? DS.Color.surfaceRaised : DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+        .background(selected ? DS.Color.surfaceRaised : DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
     }
 }
 

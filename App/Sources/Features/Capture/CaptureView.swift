@@ -42,22 +42,20 @@ struct CaptureView: View {
         .sheet(isPresented: $showRigPicker) { rigPicker }
     }
 
+    /// 上部：中央に「釣り場名 · 時刻」だけ（確定画像）。右にフラッシュ（夜釣り用、小さく）
     private var header: some View {
-        HStack {
-            Button { services.router.pending = .home } label: {
-                Image(systemName: "xmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(DS.Color.textSecondary).frame(width: 36, height: 36)
+        ZStack {
+            Text("\(model.spotName.isEmpty ? "釣り場" : model.spotName) · \(Date.now.formatted(.dateTime.hour().minute()))")
+                .font(.system(size: 15, weight: .medium)).foregroundStyle(Color.white.opacity(0.75))
+                .shadow(color: .black.opacity(0.5), radius: 3)
+            HStack {
+                Spacer()
+                Button { model.toggleTorch() } label: {
+                    Image(systemName: model.torchOn ? "bolt.fill" : "bolt.slash").font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(model.torchOn ? DS.Color.accent : Color.white.opacity(0.6)).frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            Spacer()
-            VStack(spacing: 2) {
-                Text(model.spotName.isEmpty ? "—" : model.spotName).font(DS.Font.label).foregroundStyle(DS.Color.textSecondary)
-                Text(Date.now, format: .dateTime.hour().minute()).font(DS.Font.number(13)).foregroundStyle(DS.Color.textTertiary)
-            }
-            Spacer()
-            Button { model.toggleTorch() } label: {
-                Image(systemName: model.torchOn ? "bolt.fill" : "bolt.slash").font(.system(size: 16, weight: .semibold)).foregroundStyle(model.torchOn ? DS.Color.accent : DS.Color.textSecondary).frame(width: 36, height: 36)
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, DS.Spacing.m)
         .padding(.top, DS.Spacing.m)
@@ -68,8 +66,9 @@ struct CaptureView: View {
             chip(model.tackle == .spinning ? "スピニング" : "ベイト") { model.toggleTackle() }
             Spacer()
             ZStack {
-                Circle().stroke(Color.white.opacity(0.6), lineWidth: 3).frame(width: 84, height: 84)
+                Circle().stroke(DS.Color.accent, lineWidth: 3).frame(width: 86, height: 86)
                 Circle().fill(DS.Color.accent).frame(width: 70, height: 70)
+                    .shadow(color: DS.Color.accent.opacity(0.6), radius: 16)
                     .opacity(model.isSaving ? 0.5 : 1)
             }
             .contentShape(Circle())
@@ -91,11 +90,12 @@ struct CaptureView: View {
     private func chip(_ text: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(text)
-                .font(DS.Font.label)
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(DS.Color.textPrimary)
-                .padding(.horizontal, DS.Spacing.m)
-                .padding(.vertical, DS.Spacing.s)
-                .background(DS.Color.surface.opacity(0.85), in: Capsule())
+                .lineLimit(1).minimumScaleFactor(0.7)
+                .padding(.horizontal, DS.Spacing.l)
+                .padding(.vertical, 10)
+                .background(Color.black.opacity(0.78), in: Capsule())
         }
         .buttonStyle(.plain)
         .frame(width: 110)
@@ -151,33 +151,27 @@ struct MeasureFrame: View {
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width * 0.86, h = geo.size.height * 0.26
-            let color: Color = status == .ok ? DS.Color.accent : DS.Color.faded
-            ZStack {
-                RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
-                    .strokeBorder(color, lineWidth: status == .ok ? 3 : 2)
-                    .frame(width: w, height: h)
-                if let (a, b) = endpoints, status == .ok {
-                    Path { p in
-                        p.move(to: CGPoint(x: a.x * geo.size.width, y: a.y * geo.size.height))
-                        p.addLine(to: CGPoint(x: b.x * geo.size.width, y: b.y * geo.size.height))
-                    }
-                    .stroke(DS.Color.accent.opacity(0.8), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                }
-                VStack {
-                    Spacer()
-                    if let lengthCm, status == .ok {
-                        Text("\(Int(lengthCm.rounded()))cm")
-                            .font(DS.Font.score(44))
-                            .foregroundStyle(DS.Color.accent)
-                            .shadow(radius: 6)
-                    } else if status == .tooFar {
-                        Image(systemName: "arrow.down").font(.system(size: 32, weight: .bold)).foregroundStyle(DS.Color.faded)
+            // 縦長の枠（確定画像）。魚を縦向きに入れて真上から撮る。枠の上に全長を白で大きく
+            let w = geo.size.width * 0.80, h = geo.size.height * 0.46
+            let color: Color = status == .ok ? DS.Color.accent : Color.white.opacity(0.35)
+            VStack(spacing: DS.Spacing.m) {
+                Spacer().frame(height: geo.size.height * 0.17)
+                Text(lengthCm.map { status == .ok ? "\(Int($0.rounded())) cm" : " " } ?? " ")
+                    .font(.system(size: 40, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 4)
+                    .frame(height: 48)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(color, lineWidth: status == .ok ? 4 : 2.5)
+                        .frame(width: w, height: h)
+                    if status == .tooFar {
+                        Image(systemName: "arrow.down").font(.system(size: 36, weight: .bold)).foregroundStyle(Color.white.opacity(0.5))
                     } else if status == .tooClose {
-                        Image(systemName: "arrow.up").font(.system(size: 32, weight: .bold)).foregroundStyle(DS.Color.faded)
+                        Image(systemName: "arrow.up").font(.system(size: 36, weight: .bold)).foregroundStyle(Color.white.opacity(0.5))
                     }
-                    Spacer().frame(height: geo.size.height * 0.32)
                 }
+                Spacer()
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }

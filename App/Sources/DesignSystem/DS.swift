@@ -13,6 +13,10 @@ enum DS {
         static let textTertiary = SwiftUI.Color.white.opacity(0.4)
         /// 予報が届かない先・低確信度
         static let faded = SwiftUI.Color.white.opacity(0.25)
+        /// 月相アイコン（確定画像の薄い紫）
+        static let moon = SwiftUI.Color(red: 0.56, green: 0.52, blue: 0.85)
+        /// グラフのパネル・チップの枠なし面（#1C1C1E 相当）
+        static let panel = SwiftUI.Color(red: 0.11, green: 0.11, blue: 0.12)
     }
 
     enum Font {
