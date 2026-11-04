@@ -24,7 +24,7 @@
 | L13 | 釣り場画面 | review | #12 | マージ済み。§4 |
 | L14 | ウィジェット・ロック画面・通知 | review | #16 | マージ済み。ウィジェット・通知は §5 |
 | L15 | 設定・データ管理・iCloud | review | #15 | マージ済み。iCloud の機種間同期は §6 |
-| L16 | 実機総合検証とバッテリー | blocked | #17 | 開発者の作業待ち：`docs/06_device_verification.md` のチェックリストを iPhone 16 Pro で確認し、結果を `feedback` Issue にする。ダミー釣行のシードは外した |
+| L16 | 実機総合検証とバッテリー | blocked | #17 | 開発者の作業待ち：`docs/06_device_verification.md` のチェックリストを iPhone 16 Pro で確認し、結果を `feedback` Issue にする。ダミー釣行のシードは外した。実機フィードバック 1（ホームのレイアウト・グラフ統合・チップ表記・漁港の表示と登録）はブランチ `loop/L16-feedback-home-spots` |
 | L17 | COULD 要件（F-12, F-15, F-25, F-26, F-27） | pending | | 開発者が要るものだけ指示する |
 
 状態の値：`pending`（先行ループ待ち）/ `next`（次に着手）/ `in_progress` / `review`（PR 作成済み、開発者の確認待ち）/ `done` / `blocked`（開発者の作業待ち、備考に内容）

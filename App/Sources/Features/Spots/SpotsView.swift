@@ -11,6 +11,8 @@ struct SpotsView: View {
     @State private var detail: SpotsViewModel.Card?
     @State private var searchText = ""
     @State private var showSearch = false
+    /// 表示範囲の緯度幅（度）。狭いほど拡大している
+    @State private var latitudeSpan: Double = 0.1
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -29,10 +31,20 @@ struct SpotsView: View {
             cards
         }
         .ignoresSafeArea(edges: .top)
-        .onAppear { model.attach(services); if let first = model.cards.first { selectedID = first.spot.id; camera = .region(region(for: first.spot.coordinate)) } }
+        .onAppear {
+            model.attach(services)
+            if let first = model.cards.first {
+                selectedID = first.spot.id
+                camera = .region(region(for: first.spot.coordinate))
+            } else if let c = model.currentLocation {
+                camera = .region(MKCoordinateRegion(center: c.cl, latitudinalMeters: 8000, longitudinalMeters: 8000))
+            } else {
+                camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 41.77, longitude: 140.73), latitudinalMeters: 20_000, longitudinalMeters: 20_000))
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in model.refresh() }
         .onChange(of: selectedID) { _, id in
-            if let id, let c = model.cards.first(where: { $0.spot.id == id }) { withAnimation { camera = .region(region(for: c.spot.coordinate)) } }
+            if let id, let c = model.allCards.first(where: { $0.spot.id == id }) { withAnimation { camera = .region(region(for: c.spot.coordinate)) } }
         }
         .sheet(item: $detail) { SpotDetailView(card: $0).onDisappear { model.refresh() } }
         .sheet(isPresented: $showSearch) { SpotSearchSheet { item in
@@ -46,18 +58,15 @@ struct SpotsView: View {
         MKCoordinateRegion(center: c.cl, latitudinalMeters: 4000, longitudinalMeters: 4000)
     }
 
+    /// 拡大しているときは各点にホームと同じ釣れ率の円を出す（緯度幅 0.12° ≈ 13 km 未満）
+    private var zoomedIn: Bool { latitudeSpan < 0.12 }
+
     private var map: some View {
         Map(position: $camera, interactionModes: [.pan, .zoom]) {
-            ForEach(model.cards) { card in
+            ForEach(model.allCards) { card in
                 Annotation("", coordinate: card.spot.coordinate.cl, anchor: .center) {
                     Button { selectedID = card.spot.id } label: {
-                        ZStack {
-                            Circle()
-                                .fill(card.spot.isRegistered ? DS.Color.accent : DS.Color.textTertiary)
-                                .frame(width: dotSize(card), height: dotSize(card))
-                                .opacity(selectedID == card.spot.id ? 1 : 0.8)
-                            Text("\(card.score)").font(DS.Font.number(10)).foregroundStyle(DS.Color.background)
-                        }
+                        SpotMarker(card: card, selected: selectedID == card.spot.id, zoomedIn: zoomedIn)
                     }
                     .buttonStyle(.plain)
                 }
@@ -68,14 +77,14 @@ struct SpotsView: View {
                 }
             }
         }
+        .onMapCameraChange(frequency: .onEnd) { context in
+            latitudeSpan = context.region.span.latitudeDelta
+            model.searchPorts(in: context.region)
+        }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
         .saturation(0)
         .contrast(0.9)
         .mapControlVisibility(.hidden)
-    }
-
-    private func dotSize(_ card: SpotsViewModel.Card) -> CGFloat {
-        18 + CGFloat(min(12, card.stats.sessions)) * 1.6
     }
 
     private func roundButton(_ symbol: String, action: @escaping () -> Void) -> some View {
@@ -93,13 +102,17 @@ struct SpotsView: View {
                 Spacer()
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: DS.Spacing.m) {
-                        ForEach(model.cards) { card in
-                            SpotCardView(card: card, selected: selectedID == card.spot.id, onSelectHome: { model.selectForHome(card.spot) })
+                        ForEach(model.allCards) { card in
+                            SpotCardView(card: card, selected: selectedID == card.spot.id,
+                                         onSelectHome: { model.selectForHome(card.spot) },
+                                         onRegister: { model.register(card) })
                                 .frame(width: 230)
-                                .onTapGesture { if selectedID == card.spot.id { detail = card } else { selectedID = card.spot.id } }
+                                .onTapGesture {
+                                    if selectedID == card.spot.id { if !card.isCandidate { detail = card } } else { selectedID = card.spot.id }
+                                }
                         }
-                        if model.cards.isEmpty {
-                            Text("釣行が始まると釣り場が登録されます").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).padding()
+                        if model.allCards.isEmpty {
+                            Text("地図を動かすと近くの漁港が出ます").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).padding()
                         }
                     }
                     .padding(.horizontal, DS.Spacing.l)
@@ -123,6 +136,7 @@ struct SpotCardView: View {
     let card: SpotsViewModel.Card
     let selected: Bool
     let onSelectHome: () -> Void
+    var onRegister: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.s) {
@@ -147,11 +161,19 @@ struct SpotCardView: View {
                     Text("未登録").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
                 }
                 Spacer()
-                Button(action: onSelectHome) {
-                    Text("選択").font(DS.Font.caption).foregroundStyle(DS.Color.textPrimary)
-                        .padding(.horizontal, DS.Spacing.m).padding(.vertical, 4).background(DS.Color.surfaceRaised, in: Capsule())
+                if card.isCandidate {
+                    Button(action: onRegister) {
+                        Label("登録", systemImage: "plus").font(DS.Font.caption).foregroundStyle(DS.Color.background)
+                            .padding(.horizontal, DS.Spacing.m).padding(.vertical, 4).background(DS.Color.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button(action: onSelectHome) {
+                        Text("選択").font(DS.Font.caption).foregroundStyle(DS.Color.textPrimary)
+                            .padding(.horizontal, DS.Spacing.m).padding(.vertical, 4).background(DS.Color.surfaceRaised, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(DS.Spacing.m)
@@ -196,5 +218,50 @@ struct SpotSearchSheet: View {
         request.naturalLanguageQuery = text
         request.region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 38, longitude: 137), latitudinalMeters: 2_000_000, longitudinalMeters: 2_000_000)
         results = (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
+    }
+}
+
+/// 地図の点。引いているときは釣行数で大きさが変わる点（登録はオレンジ、未登録はグレー）に釣行数の小さな数字、
+/// 拡大しているときはホームと同じ釣れ率の円（数字と円弧）。
+struct SpotMarker: View {
+    let card: SpotsViewModel.Card
+    let selected: Bool
+    let zoomedIn: Bool
+
+    private var color: Color { card.spot.isRegistered ? DS.Color.accent : DS.Color.textTertiary }
+
+    var body: some View {
+        if zoomedIn {
+            VStack(spacing: 2) {
+                ZStack {
+                    Circle().fill(DS.Color.background.opacity(0.85)).frame(width: 44, height: 44)
+                    Circle().stroke(DS.Color.faded, lineWidth: 4).frame(width: 38, height: 38)
+                    Circle().trim(from: 0, to: CGFloat(max(0, min(100, card.score))) / 100)
+                        .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 38, height: 38)
+                    Text("\(card.score)").font(DS.Font.number(15)).foregroundStyle(DS.Color.textPrimary)
+                }
+                .scaleEffect(selected ? 1.15 : 1)
+                Text(card.spot.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(DS.Color.textPrimary)
+                    .lineLimit(1).padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(DS.Color.background.opacity(0.7), in: Capsule())
+            }
+        } else {
+            HStack(spacing: 3) {
+                Circle()
+                    .fill(color)
+                    .frame(width: dotSize, height: dotSize)
+                    .opacity(selected ? 1 : 0.85)
+                    .overlay(selected ? Circle().stroke(.white, lineWidth: 2) : nil)
+                if card.stats.sessions > 0 {
+                    Text("\(card.stats.sessions)").font(.system(size: 10, weight: .semibold)).foregroundStyle(DS.Color.textSecondary)
+                }
+            }
+        }
+    }
+
+    private var dotSize: CGFloat {
+        card.isCandidate ? 10 : 14 + CGFloat(min(12, card.stats.sessions)) * 1.6
     }
 }

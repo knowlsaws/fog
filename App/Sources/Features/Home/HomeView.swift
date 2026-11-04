@@ -17,8 +17,8 @@ struct HomeView: View {
                 header.frame(height: geo.size.height * 0.07)
                 scoreArea.frame(height: geo.size.height * 0.22)
                 chipsRow.frame(height: geo.size.height * 0.12)
-                eventsRow.frame(height: geo.size.height * 0.09)
-                ForecastChart(model: model).frame(height: geo.size.height * 0.32)
+                eventsRow.frame(height: geo.size.height * 0.07)
+                ForecastChart(model: model).frame(height: geo.size.height * 0.40)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, DS.Spacing.l)
@@ -64,8 +64,8 @@ struct HomeView: View {
 
     private var scoreArea: some View {
         Button { showBreakdown = true } label: {
-            HStack(alignment: .center, spacing: DS.Spacing.l) {
-                Spacer(minLength: 0)
+            ZStack {
+                // 円は常に画面中央（魚種別の数字があっても動かさない）
                 ZStack {
                     Circle().stroke(DS.Color.faded, lineWidth: 10)
                     Circle().trim(from: 0, to: CGFloat(model.score?.score ?? 0) / 100)
@@ -78,18 +78,23 @@ struct HomeView: View {
                         .contentTransition(.numericText())
                 }
                 .aspectRatio(1, contentMode: .fit)
-                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                    ForEach(model.speciesScores, id: \.species) { s in
-                        HStack(spacing: DS.Spacing.s) {
-                            Text("\(s.score)").font(DS.Font.number(18)).foregroundStyle(DS.Color.textPrimary)
-                            Text(s.species).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                .padding(.vertical, DS.Spacing.s)
+                if !model.speciesScores.isEmpty {
+                    HStack {
+                        Spacer()
+                        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                            ForEach(model.speciesScores, id: \.species) { s in
+                                HStack(spacing: DS.Spacing.s) {
+                                    Text("\(s.score)").font(DS.Font.number(18)).foregroundStyle(DS.Color.textPrimary)
+                                    Text(s.species).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                                }
+                            }
                         }
+                        .frame(width: 96, alignment: .leading)
                     }
                 }
-                .frame(width: 110, alignment: .leading)
-                Spacer(minLength: 0)
             }
-            .padding(.vertical, DS.Spacing.s)
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
     }
@@ -100,15 +105,18 @@ struct HomeView: View {
         HStack(spacing: DS.Spacing.s) {
             ForEach(model.chips) { chip in
                 Button { chipDetail = chip } label: {
-                    VStack(spacing: DS.Spacing.xs) {
+                    VStack(spacing: 2) {
                         Image(systemName: chip.symbol)
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                             .rotationEffect(chip.kind == .wind ? .degrees((model.windDirectionDeg ?? 0) + 180) : .zero)
-                        Text(chip.text).font(DS.Font.caption).lineLimit(1).minimumScaleFactor(0.7)
+                            .frame(height: 18)
+                        Text(chip.value).font(DS.Font.number(17)).lineLimit(1).minimumScaleFactor(0.6)
+                        Text(chip.label).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1).minimumScaleFactor(0.7)
                     }
                     .foregroundStyle(color(chip.tone))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, DS.Spacing.s)
+                    .padding(.horizontal, DS.Spacing.xs)
                     .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -169,66 +177,67 @@ enum MoonSymbol {
     }
 }
 
-/// 2 段グラフ：上段 釣れ率、下段 潮位と満干。時間軸は共有、現在はオレンジの縦線、昼夜を背景の明暗で、予報の無い先は薄く。
+/// 1 枚のグラフ：釣れ率のライン（オレンジ、左軸 0〜100）と、その下に潮位の曲線（グレー、満干の時刻付き）。
+/// 時間軸は共有、現在はオレンジの縦線、夜は背景を暗く、予報の無い先は線を薄く。横スクロールとピンチで伸縮。
 struct ForecastChart: View {
     let model: HomeViewModel
     @State private var visibleHours: Double = 24
     @State private var scrollPosition: Date = .now
 
-    var body: some View {
-        VStack(spacing: DS.Spacing.xs) {
-            Chart {
-                ForEach(dayShading, id: \.0) { (start, end) in
-                    RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
-                        .foregroundStyle(DS.Color.surface.opacity(0.5))
-                }
-                ForEach(model.timeline, id: \.at) { p in
-                    LineMark(x: .value("時刻", p.at), y: .value("釣れ率", p.score))
-                        .foregroundStyle(p.isForecast && model.forecastHorizon.map { p.at > $0 } == true ? DS.Color.accent.opacity(0.3) : DS.Color.accent)
-                        .interpolationMethod(.catmullRom)
-                        .lineStyle(StrokeStyle(lineWidth: 2))
-                }
-                RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.accent).lineStyle(StrokeStyle(lineWidth: 1))
-            }
-            .chartYScale(domain: 0...100)
-            .chartYAxis(.hidden)
-            .chartXAxis(.hidden)
-            .chartScrollableAxes(.horizontal)
-            .chartXVisibleDomain(length: visibleHours * 3600)
-            .chartScrollPosition(x: $scrollPosition)
+    /// 潮位曲線を置く高さ（釣れ率の目盛りで 4〜40 の帯）
+    private let tideBand: ClosedRange<Double> = 4...40
 
-            Chart {
-                ForEach(dayShading, id: \.0) { (start, end) in
-                    RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", tideRange.lowerBound), yEnd: .value("y1", tideRange.upperBound))
-                        .foregroundStyle(DS.Color.surface.opacity(0.5))
-                }
-                ForEach(model.tideCurve) { p in
-                    LineMark(x: .value("時刻", p.at), y: .value("潮位", p.levelCm))
-                        .foregroundStyle(DS.Color.textSecondary)
-                        .interpolationMethod(.catmullRom)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                }
-                ForEach(model.tideExtremes, id: \.at) { e in
-                    PointMark(x: .value("時刻", e.at), y: .value("潮位", e.levelCm))
-                        .foregroundStyle(DS.Color.textPrimary)
-                        .symbolSize(18)
-                        .annotation(position: e.kind == .high ? .top : .bottom, spacing: 2) {
-                            Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+    var body: some View {
+        Chart {
+            ForEach(dayShading, id: \.0) { (start, end) in
+                RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
+                    .foregroundStyle(DS.Color.surface.opacity(0.5))
+            }
+            ForEach(model.tideCurve) { p in
+                AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("潮位", tideY(p.levelCm)))
+                    .foregroundStyle(DS.Color.textTertiary.opacity(0.12))
+                    .interpolationMethod(.catmullRom)
+                LineMark(x: .value("時刻", p.at), y: .value("潮位", tideY(p.levelCm)), series: .value("系列", "潮位"))
+                    .foregroundStyle(DS.Color.textSecondary.opacity(0.8))
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+            }
+            ForEach(model.tideExtremes, id: \.at) { e in
+                PointMark(x: .value("時刻", e.at), y: .value("潮位", tideY(e.levelCm)))
+                    .foregroundStyle(DS.Color.textPrimary)
+                    .symbolSize(16)
+                    .annotation(position: e.kind == .high ? .top : .bottom, spacing: 2) {
+                        HStack(spacing: 2) {
+                            Text(e.kind == .high ? "満" : "干").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                            Text(e.at, format: .dateTime.hour().minute()).font(DS.Font.number(11)).foregroundStyle(DS.Color.textSecondary)
                         }
-                }
-                RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.accent).lineStyle(StrokeStyle(lineWidth: 1))
+                    }
             }
-            .chartYScale(domain: tideRange)
-            .chartYAxis(.hidden)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .hour, count: 6)) { value in
-                    AxisValueLabel(format: .dateTime.hour(), centered: false).foregroundStyle(DS.Color.textTertiary)
-                }
+            ForEach(model.timeline, id: \.at) { p in
+                LineMark(x: .value("時刻", p.at), y: .value("釣れ率", p.score), series: .value("系列", "釣れ率"))
+                    .foregroundStyle(p.isForecast && model.forecastHorizon.map { p.at > $0 } == true ? DS.Color.accent.opacity(0.3) : DS.Color.accent)
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5))
             }
-            .chartScrollableAxes(.horizontal)
-            .chartXVisibleDomain(length: visibleHours * 3600)
-            .chartScrollPosition(x: $scrollPosition)
+            RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.accent).lineStyle(StrokeStyle(lineWidth: 1))
         }
+        .chartYScale(domain: 0...100)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
+                AxisGridLine().foregroundStyle(DS.Color.faded.opacity(0.5))
+                AxisValueLabel {
+                    if let v = value.as(Int.self) { Text("\(v)").font(DS.Font.number(10)).foregroundStyle(DS.Color.textTertiary) }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
+                AxisValueLabel(format: .dateTime.hour(), centered: false).font(DS.Font.number(10)).foregroundStyle(DS.Color.textTertiary)
+            }
+        }
+        .chartScrollableAxes(.horizontal)
+        .chartXVisibleDomain(length: visibleHours * 3600)
+        .chartScrollPosition(x: $scrollPosition)
         .gesture(MagnifyGesture().onChanged { value in
             visibleHours = min(72, max(6, 24 / value.magnification))
         })
@@ -238,10 +247,17 @@ struct ForecastChart: View {
         }
     }
 
+    /// 潮位（cm）を釣れ率の目盛りの下帯に写す
+    private func tideY(_ level: Double) -> Double {
+        let lo = tideRange.lowerBound, hi = tideRange.upperBound
+        let t = (level - lo) / (hi - lo)
+        return tideBand.lowerBound + t * (tideBand.upperBound - tideBand.lowerBound)
+    }
+
     private var tideRange: ClosedRange<Double> {
         let levels = model.tideCurve.map(\.levelCm)
         guard let lo = levels.min(), let hi = levels.max(), hi > lo else { return 0...200 }
-        return (lo - 10)...(hi + 10)
+        return lo...hi
     }
 
     /// 夜の区間（日の入〜翌日の出）
@@ -308,7 +324,10 @@ struct ChipDetailSheet: View {
     var body: some View {
         let env = services.environment.snapshot(at: model.now, coordinate: model.coordinate)
         VStack(alignment: .leading, spacing: DS.Spacing.m) {
-            Text(chip.text).font(DS.Font.number(28)).foregroundStyle(DS.Color.textPrimary)
+            HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.s) {
+                Text(chip.value).font(DS.Font.number(28)).foregroundStyle(DS.Color.textPrimary)
+                Text(chip.label).font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
+            }
             switch chip.kind {
             case .tide:
                 row("潮位", env.tideLevelCm.map { "\(Int($0.rounded())) cm" })
