@@ -1,0 +1,135 @@
+import Foundation
+import Core
+import os
+
+/// §2 の環境情報をまとめて扱う。
+/// - 外部 API（WeatherKit / Open-Meteo）は釣り場ごとに 1 時間に 1 回まで（`FetchGate`）
+/// - 取得結果は `ForecastCache` に保存し、圏外ではキャッシュだけで `EnvSnapshot` を組み立てる
+/// - 潮汐・天文は Core で計算（通信なし）
+@MainActor
+@Observable
+final class EnvironmentService {
+    private(set) var cache = ForecastCache()
+    private(set) var gate = FetchGate()
+    private(set) var lastError: String?
+    let barometer: BarometerService
+    private let weather: WeatherProviding
+    private let marine: MarineProviding
+    private let catalog: TideCatalog
+    private let storeURL: URL?
+    private static let log = Logger(subsystem: "fog", category: "environment")
+
+    init(weather: WeatherProviding = WeatherKitProvider(), marine: MarineProviding = OpenMeteoMarineClient(),
+         barometer: BarometerService = BarometerService(), catalog: TideCatalog = .bundled(), storeURL: URL? = EnvironmentService.defaultStoreURL()) {
+        self.weather = weather
+        self.marine = marine
+        self.barometer = barometer
+        self.catalog = catalog
+        self.storeURL = storeURL
+        load()
+    }
+
+    // MARK: 取得（1 時間に 1 回）
+
+    /// 必要なら気象と海況を取得してキャッシュを更新する。圏外や失敗でも投げない（キャッシュで動く）。
+    func refreshIfNeeded(at coordinate: Coordinate, now: Date = .now, force: Bool = false) async {
+        let key = ForecastCache.key(for: coordinate)
+        if force || gate.tryAcquire("weather:" + key, now: now) {
+            do {
+                let samples = try await weather.fetch(at: coordinate, from: now.addingTimeInterval(-24 * 3600), to: now.addingTimeInterval(10 * 86_400))
+                cache.mergeWeather(coordinate, samples: samples, fetchedAt: now)
+                lastError = nil
+            } catch {
+                gate.release("weather:" + key)
+                lastError = error.localizedDescription
+                Self.log.error("weather fetch failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        if force || gate.tryAcquire("marine:" + key, now: now) {
+            do {
+                let target = cache.entry(for: coordinate)?.marineGrid ?? coordinate
+                if let result = try await marine.fetch(around: target) {
+                    cache.mergeMarine(coordinate, grid: result.grid, samples: result.samples, fetchedAt: now)
+                } else {
+                    Self.log.notice("marine: no sea grid near \(key, privacy: .public)")
+                }
+            } catch {
+                gate.release("marine:" + key)
+                lastError = error.localizedDescription
+                Self.log.error("marine fetch failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        save()
+    }
+
+    // MARK: スナップショット（通信なし）
+
+    func tideStation(near coordinate: Coordinate) -> TideStation? { catalog.nearest(to: coordinate) }
+
+    func builder(for coordinate: Coordinate) -> EnvSnapshotBuilder {
+        EnvSnapshotBuilder(tideStation: tideStation(near: coordinate))
+    }
+
+    func inputs(for coordinate: Coordinate) -> EnvSnapshotBuilder.Inputs {
+        let entry = cache.entry(for: coordinate)
+        return EnvSnapshotBuilder.Inputs(weather: entry?.weather ?? [], marine: entry?.marine ?? [], pressure: barometer.samples)
+    }
+
+    /// 指定時刻・位置のスナップショット。予報・キャッシュ・端末計算だけで必ず組み立てる。
+    func snapshot(at date: Date, coordinate: Coordinate) -> EnvSnapshot {
+        builder(for: coordinate).build(at: date, coordinate: coordinate, inputs: inputs(for: coordinate))
+    }
+
+    /// 予報が届いている最後の時刻（ホームのグラフで線を薄くする境界）。
+    func forecastHorizon(for coordinate: Coordinate) -> Date? { cache.weatherHorizon(for: coordinate) }
+
+    /// 通信復帰後：予報で埋めたスナップショットを実況に差し替える（F-06）。
+    func backfill(_ session: Core.Session, now: Date = .now) async -> Core.Session {
+        guard session.snapshots.contains(where: { $0.isForecast }) || session.catches.contains(where: { $0.env?.isForecast == true }) else { return session }
+        guard let spotCoordinate = session.snapshots.first?.coordinate ?? session.catches.first?.coordinate else { return session }
+        do {
+            let observed = try await weather.fetch(at: spotCoordinate, from: session.startedAt.addingTimeInterval(-3600), to: min(now, session.endedAt ?? now))
+            cache.mergeWeather(spotCoordinate, samples: observed, fetchedAt: now)
+            save()
+            let b = builder(for: spotCoordinate)
+            var s = session
+            s.snapshots = s.snapshots.map { b.replacingForecast(in: $0, with: observed) }
+            s.catches = s.catches.map { c in
+                var c = c
+                if let env = c.env { c.env = b.replacingForecast(in: env, with: observed) }
+                return c
+            }
+            return s
+        } catch {
+            Self.log.notice("backfill skipped: \(error.localizedDescription, privacy: .public)")
+            return session
+        }
+    }
+
+    // MARK: 永続化（App Group の JSON）
+
+    struct Persisted: Codable {
+        var cache: ForecastCache
+        var gate: FetchGate
+    }
+
+    static func defaultStoreURL() -> URL? {
+        let base = PersistenceController.storeURL().deletingLastPathComponent()
+        return base.appendingPathComponent("environment-cache.json")
+    }
+
+    private func load() {
+        guard let storeURL, let data = try? Data(contentsOf: storeURL),
+              let p = try? FogJSON.decode(Persisted.self, from: data) else { return }
+        cache = p.cache
+        gate = p.gate
+    }
+
+    private func save() {
+        guard let storeURL, let data = try? FogJSON.encode(Persisted(cache: cache, gate: gate), pretty: false) else { return }
+        try? data.write(to: storeURL, options: .atomic)
+    }
+
+    /// 設定画面「情報源」用のクレジット。
+    static let openMeteoCredit = (text: OpenMeteoMarine.creditText, url: URL(string: OpenMeteoMarine.creditURL)!)
+}
