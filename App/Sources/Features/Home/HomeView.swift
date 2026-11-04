@@ -291,6 +291,10 @@ struct ForecastChart: View {
                     .frame(height: geo.size.height * 0.37)
                 detailTable
                 weekRow.frame(height: 44)
+                    // 週行の上のスワイプは週送り（±7 日）。それ以外のスワイプは日送り
+                    .highPriorityGesture(DragGesture(minimumDistance: 30).onEnded { v in
+                        if v.translation.width < -30 { step(+7, clamp: true) } else if v.translation.width > 30 { step(-7, clamp: true) }
+                    })
                 footer.frame(height: 16)
             }
             .padding(.horizontal, DS.Spacing.m)
@@ -318,9 +322,12 @@ struct ForecastChart: View {
         return f.string(from: date)
     }
 
-    private func step(_ d: Int) {
-        let next = model.dayOffset + d
-        guard model.dayOffsetRange.contains(next) else { return }
+    /// 日送り。`clamp` なら範囲を超える分は端に寄せる（週送りで残りが 7 日未満でも端まで動く）
+    private func step(_ d: Int, clamp: Bool = false) {
+        let range = model.dayOffsetRange
+        var next = model.dayOffset + d
+        if clamp { next = min(max(next, range.lowerBound), range.upperBound) }
+        guard range.contains(next), next != model.dayOffset else { return }
         withAnimation(.easeInOut(duration: 0.2)) { model.dayOffset = next }
     }
 
