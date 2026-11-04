@@ -345,6 +345,7 @@ struct ChipDetailSheet: View {
     let chip: HomeViewModel.Chip
     let model: HomeViewModel
     @Environment(AppServices.self) private var services
+    @State private var refreshing = false
 
     var body: some View {
         let env = services.environment.snapshot(at: model.now, coordinate: model.coordinate)
@@ -377,11 +378,41 @@ struct ChipDetailSheet: View {
                 row("湿度", env.humidity.map { "\(Int(($0 * 100).rounded()))%" })
                 row("降水", env.precipitationMM.map { String(format: "%.1f mm", $0) })
             }
+            if chip.kind == .wind || chip.kind == .weather {
+                fetchStatus
+            }
             Spacer()
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DS.Color.background)
+    }
+
+    /// 気象の取得状態：取得元、最後に取れた時刻、失敗の内容、再取得ボタン（実機での切り分け用）
+    private var fetchStatus: some View {
+        let env = services.environment
+        let key = ForecastCache.key(for: model.coordinate)
+        let last = env.cache.entry(for: model.coordinate)?.weatherFetchedAt
+        return VStack(alignment: .leading, spacing: DS.Spacing.s) {
+            Divider().overlay(DS.Color.faded)
+            row("取得元", "Apple Weather（WeatherKit）")
+            row("最後の取得", last.map { $0.formatted(.dateTime.month().day().hour().minute()) } ?? "まだ取れていません")
+            row("位置", String(format: "%.3f, %.3f", model.coordinate.latitude, model.coordinate.longitude))
+            if let err = env.lastError {
+                Text(err).font(DS.Font.caption).foregroundStyle(DS.Color.accent).fixedSize(horizontal: false, vertical: true)
+            } else if last == nil, env.gate.lastFetch["weather:" + key] != nil {
+                Text("取得中…").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            }
+            Button {
+                refreshing = true
+                Task { await model.forceRefreshEnvironment(); refreshing = false }
+            } label: {
+                Text(refreshing ? "取得中…" : "いま再取得").font(DS.Font.label).foregroundStyle(DS.Color.background)
+                    .padding(.horizontal, DS.Spacing.l).padding(.vertical, DS.Spacing.s).background(DS.Color.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(refreshing)
+        }
     }
 
     private func row(_ label: String, _ value: String?) -> some View {

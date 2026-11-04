@@ -93,7 +93,7 @@ final class HomeViewModel {
             (species: name, score: engine.score(ScoreInput(at: now, coordinate: coordinate, env: current, species: name, timeZone: timeZone)).score)
         }
 
-        chips = makeChips(current)
+        chips = makeChips(current, fetchFailed: env.lastError != nil)
 
         // 推移：今日の 0 時から予報のある範囲（最低 48 時間）まで 15 分刻み。潮は無期限なので潮位曲線は同じ範囲
         var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
@@ -125,6 +125,13 @@ final class HomeViewModel {
         PeakNotifier.schedule(points: timeline, spot: spot, now: now, timeZone: timeZone)
     }
 
+    /// チップ詳細の「再取得」：1 時間の間隔制限を無視して気象・海況を取りに行く。
+    func forceRefreshEnvironment() async {
+        guard let services else { return }
+        await services.environment.refreshIfNeeded(at: coordinate, now: .now, force: true)
+        await refresh()
+    }
+
     func select(spot: Spot) {
         UserDefaults.standard.set(spot.id.uuidString, forKey: "fog.homeSpotID")
         Task { await refresh() }
@@ -133,7 +140,7 @@ final class HomeViewModel {
     var availableSpots: [Spot] { ((try? services?.store.spots()) ?? []).filter(\.isRegistered) }
 
     /// 4 チップ：値は「次の出来事の時刻」か「今の数値」。残り時間は出さない（時刻と紛らわしいため）。
-    private func makeChips(_ env: EnvSnapshot) -> [Chip] {
+    private func makeChips(_ env: EnvSnapshot, fetchFailed: Bool) -> [Chip] {
         var out: [Chip] = []
         // 潮：矢印（上げ／下げ／止まり）、次の満干の時刻、潮名
         let rate = env.tideRateCmPerHour ?? 0
@@ -162,12 +169,12 @@ final class HomeViewModel {
             out.append(Chip(kind: .wind, symbol: "location.north.fill", value: "\(Int(w.rounded())) m/s",
                             label: env.windDirectionDeg.map { Self.compass($0) + "の風" } ?? "風", tone: w > 8 ? .bad : (w <= 3 ? .good : .normal)))
         } else {
-            out.append(Chip(kind: .wind, symbol: "wind", value: "—", label: "風 取得中", tone: .normal))
+            out.append(Chip(kind: .wind, symbol: "wind", value: "—", label: fetchFailed ? "風 取得できず" : "風 取得中", tone: .normal))
         }
         // 天気：気温と天気の名前
         let temp = env.airTemperatureC.map { "\(Int($0.rounded()))°" } ?? "—"
         out.append(Chip(kind: .weather, symbol: Self.weatherSymbol(env.conditionCode), value: temp,
-                        label: env.airTemperatureC == nil ? "天気 取得中" : Self.weatherName(env.conditionCode, precipitation: env.precipitationMM),
+                        label: env.airTemperatureC == nil ? (fetchFailed ? "天気 取得できず" : "天気 取得中") : Self.weatherName(env.conditionCode, precipitation: env.precipitationMM),
                         tone: (env.precipitationMM ?? 0) > 1 ? .bad : .normal))
         return out
     }
