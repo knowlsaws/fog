@@ -17,7 +17,7 @@
 | L6 | 魚種判定 | pending | | |
 | L7 | 釣れ率エンジン（Core） | in_progress | | ブランチ `loop/L7-score-engine`（Core のみ、L3/L4 と並行） |
 | L8 | 統計・相関・レポート（Core＋Foundation Models） | in_progress | | ブランチ `loop/L8-analytics`（L7 の上に積む） |
-| L9 | ホーム画面 | pending | | |
+| L9 | ホーム画面 | in_progress | | ブランチ `loop/L9-home` |
 | L10 | 撮影画面の仕上げ | pending | | |
 | L11 | ログ画面 | pending | | |
 | L12 | 図鑑画面 | pending | | |

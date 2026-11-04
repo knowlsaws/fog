@@ -21,6 +21,11 @@ public struct EnvSnapshotBuilder: Sendable {
     }
 
     public func build(at date: Date, coordinate: Coordinate, inputs: Inputs) -> EnvSnapshot {
+        build(at: date, coordinate: coordinate, inputs: inputs, tide: tideStation.map { TideEngine(station: $0) }, extremes: nil)
+    }
+
+    /// 推移計算用：潮汐エンジンと期間内の満干を渡すと、点ごとの満干探索を省ける（ホームの 15 分刻み）。
+    public func build(at date: Date, coordinate: Coordinate, inputs: Inputs, tide: TideEngine?, extremes: [TideExtreme]?) -> EnvSnapshot {
         var env = EnvSnapshot(at: date, coordinate: coordinate, isForecast: false)
 
         // 気象：直近 1 時間値を補間
@@ -63,11 +68,15 @@ public struct EnvSnapshotBuilder: Sendable {
         env.oceanCurrentMS = m(\.oceanCurrentMS)
 
         // 潮汐
-        if let station = tideStation {
-            let engine = TideEngine(station: station)
+        if let engine = tide {
             env.tideLevelCm = engine.level(at: date)
             env.tideRateCmPerHour = engine.rate(at: date)
-            let next = engine.nextExtremes(after: date, count: 2)
+            let next: [TideExtreme]
+            if let extremes, let lastKnown = extremes.last?.at, lastKnown > date.addingTimeInterval(13 * 3600) {
+                next = extremes.filter { $0.at > date }
+            } else {
+                next = engine.nextExtremes(after: date, count: 2)
+            }
             env.nextHighTideAt = next.first { $0.kind == .high }?.at
             env.nextLowTideAt = next.first { $0.kind == .low }?.at
         }
