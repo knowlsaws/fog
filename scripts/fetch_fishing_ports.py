@@ -84,26 +84,31 @@ def parse_gml(data: bytes, kind: str) -> list[dict]:
             points[pid] = (lat, lon)
     out: list[dict] = []
     seen: set[tuple[str, str]] = set()
+    # 国土数値情報の要素名：漁港 C09 は ksj:FishingPort（fishingPortName / position）、
+    # 港湾 C02 は ksj:PortAndHarbor（portName / position）。名前に「港」が無い（例「鹿部」）ので補う
+    feature_tags = {"FishingPort": ("fishingPortName", "漁港"), "PortAndHarbor": ("portName", "港")}
     for feature in root.iter():
+        tag = local(feature.tag)
+        if tag not in feature_tags:
+            continue
+        name_tag, suffix = feature_tags[tag]
         ref = None
-        texts: list[str] = []
+        name = None
         pref = None
-        for c in feature.iter():
+        for c in feature:
+            ct = local(c.tag)
             href = next((v for k, v in c.attrib.items() if local(k) == "href"), None)
-            if href and href.startswith("#") and ref is None:
+            if ct == "position" and href and href.startswith("#"):
                 ref = href[1:]
-            if c.text and c.text.strip():
-                t = c.text.strip()
-                texts.append(t)
-                if "dministrative" in local(c.tag) and re.fullmatch(r"\d{2,5}", t):
-                    pref = t[:2]
-        if not ref or ref not in points:
+            elif ct == name_tag and c.text and c.text.strip():
+                name = c.text.strip()
+            elif ct == "administrativeAreaCode" and c.text and re.fullmatch(r"\d{2,5}", c.text.strip()):
+                pref = c.text.strip()[:2]
+        if not ref or ref not in points or not name:
             continue
-        name = next((t for t in texts if "港" in t and len(t) <= 20), None)
-        if not name or (name, ref) in seen:
-            continue
-        # 入れ子の親要素（データセット全体など）で同じ組を拾わないよう、直下に点参照を持つ要素だけ
-        if not any(next((v for k, v in c.attrib.items() if local(k) == "href"), "") == "#" + ref for c in feature.iter()):
+        if not name.endswith("港") and not name.endswith("漁港"):
+            name = name + suffix
+        if (name, ref) in seen:
             continue
         seen.add((name, ref))
         lat, lon = points[ref]
