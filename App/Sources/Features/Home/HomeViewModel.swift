@@ -205,7 +205,7 @@ final class HomeViewModel {
     }
 
     /// 同梱の港データから漁港を選んで釣り場に登録し、ホームの釣り場にする
-    func select(port: Port) {
+    func select(port: Core.Port) {
         guard let services else { return }
         let existing = (try? services.store.spots()) ?? []
         if let same = existing.first(where: { Geo.distanceMeters($0.coordinate, port.coordinate) < 300 }) {
@@ -228,7 +228,7 @@ final class HomeViewModel {
     private static let portCatalog = PortCatalog.bundled()
 
     /// 近い順の漁港（検索語があれば全国から名前で絞る）
-    func ports(matching query: String, limit: Int = 30) -> [Port] {
+    func ports(matching query: String, limit: Int = 30) -> [Core.Port] {
         let q = query.trimmingCharacters(in: .whitespaces)
         let base = Self.portCatalog.ports
         let origin = currentLocation ?? coordinate
