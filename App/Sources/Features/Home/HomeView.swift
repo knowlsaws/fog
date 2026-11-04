@@ -598,11 +598,7 @@ struct ForecastChart: View {
         return tideBand.lowerBound + t * (tideBand.upperBound - tideBand.lowerBound)
     }
 
-    private var tideRange: ClosedRange<Double> {
-        let levels = model.tideCurve.map(\.levelCm)
-        guard let lo = levels.min(), let hi = levels.max(), hi > lo else { return 0...200 }
-        return lo...hi
-    }
+    private var tideRange: ClosedRange<Double> { model.tideRangeCm }
 
     /// 夜の区間（日の入〜翌日の出）。表示中の日に重なるものだけ
     private var dayShading: [(Date, Date)] {
