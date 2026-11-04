@@ -49,6 +49,9 @@ targets:
         NSPhotoLibraryUsageDescription: 釣行中に撮った写真を釣果として取り込みます。
         NSMotionUsageDescription: 釣行中の移動量を記録します。
         UIBackgroundModes: [location, fetch, processing, remote-notification]
+        CFBundleURLTypes:
+          - CFBundleURLName: ${BUNDLE_ID_PREFIX}.fog
+            CFBundleURLSchemes: [fog]
         # SwiftData/CloudKit と App Group の識別子。コードはこれを読む（Services/Persistence/PersistenceController.swift）
         FogCloudKitContainerIdentifier: iCloud.${BUNDLE_ID_PREFIX}.fog
         FogAppGroupIdentifier: group.${BUNDLE_ID_PREFIX}.fog

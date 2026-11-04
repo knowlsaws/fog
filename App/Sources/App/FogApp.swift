@@ -23,6 +23,9 @@ struct FogApp: App {
                 .environment(services)
                 .environment(services.store)
                 .task { await services.start() }
+                .onOpenURL { url in
+                    if let link = DeepLink.parse(url) { services.router.pending = link }
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await services.didBecomeActive() } }
                 }
