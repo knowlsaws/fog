@@ -212,10 +212,10 @@ struct ForecastChart: View {
             }
             ForEach(model.tideCurve) { p in
                 AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("潮位", tideY(p.levelCm)), series: .value("系列", "潮位面"))
-                    .foregroundStyle(LinearGradient(colors: [DS.Color.secondary.opacity(0.35), DS.Color.secondary.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                    .foregroundStyle(LinearGradient(colors: [DS.Color.sea.opacity(0.35), DS.Color.sea.opacity(0.02)], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.catmullRom)
                 LineMark(x: .value("時刻", p.at), y: .value("潮位", tideY(p.levelCm)), series: .value("系列", "潮位"))
-                    .foregroundStyle(DS.Color.secondary)
+                    .foregroundStyle(DS.Color.sea)
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
             }
@@ -242,7 +242,7 @@ struct ForecastChart: View {
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 1.6))
             }
-            RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.accent).lineStyle(StrokeStyle(lineWidth: 1))
+            RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.secondary).lineStyle(StrokeStyle(lineWidth: 1.5))
         }
         .chartYScale(domain: 0...100)
         .chartYAxis {
@@ -254,8 +254,19 @@ struct ForecastChart: View {
             }
         }
         .chartXAxis {
+            // 6 時間ごとに時刻、0 時には月日（横スクロールしてもいつの情報か分かるように）
             AxisMarks(values: .stride(by: .hour, count: 6)) { value in
-                AxisValueLabel(format: .dateTime.hour(), centered: false).font(DS.Font.number(10)).foregroundStyle(DS.Color.textTertiary)
+                if let d = value.as(Date.self) {
+                    let hour = Calendar.current.component(.hour, from: d)
+                    AxisGridLine().foregroundStyle(hour == 0 ? DS.Color.faded : DS.Color.faded.opacity(0.4))
+                    AxisValueLabel(centered: false) {
+                        if hour == 0 {
+                            Text(d, format: .dateTime.month(.defaultDigits).day()).font(DS.Font.number(10)).foregroundStyle(DS.Color.textSecondary)
+                        } else {
+                            Text("\(hour)").font(DS.Font.number(10)).foregroundStyle(DS.Color.textTertiary)
+                        }
+                    }
+                }
             }
         }
         .chartScrollableAxes(.horizontal)
@@ -264,7 +275,7 @@ struct ForecastChart: View {
         .padding(DS.Spacing.m)
         .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .gesture(MagnifyGesture().onChanged { value in
-            visibleHours = min(72, max(6, 24 / value.magnification))
+            visibleHours = min(24 * 7, max(6, 24 / value.magnification))
         })
         .onAppear { scrollPosition = model.now.addingTimeInterval(-6 * 3600) }
         .onChange(of: model.scrollTarget) { _, target in

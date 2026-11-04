@@ -99,7 +99,8 @@ private struct TideGraph: View {
     let points: [WidgetSnapshot.Point]
     let range: ClosedRange<Double>?
     let now: Date
-    private let green = Color(red: 0.45, green: 0.62, blue: 0.47)
+    /// 潮位は海の青（ホームと同じ）
+    private let green = Color(red: 0.30, green: 0.62, blue: 0.95)
 
     var body: some View {
         GeometryReader { geo in

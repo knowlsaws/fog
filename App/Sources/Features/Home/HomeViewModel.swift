@@ -46,6 +46,7 @@ final class HomeViewModel {
 
     private var services: AppServices?
     private let cache = AnalysisCache()
+    private var timelineKey = ""
     let timeZone = TimeZone(identifier: "Asia/Tokyo") ?? .current
 
     func attach(_ services: AppServices) {
@@ -95,27 +96,35 @@ final class HomeViewModel {
 
         chips = makeChips(current, fetchFailed: env.lastError != nil)
 
-        // 推移：今日の 0 時から予報のある範囲（最低 48 時間）まで 15 分刻み。潮は無期限なので潮位曲線は同じ範囲
+        // 推移：前日の 0 時から、予報のある範囲か 10 日先の遠い方まで 15 分刻み（潮・天文は無期限に計算できる）。
+        // 計算が重いので、場所・予報・保存データ・日付が変わったときだけ作り直す（30 秒ごとの更新では「今」の線だけ動く）
         var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
-        let start = cal.startOfDay(for: now)
+        let start = cal.startOfDay(for: now).addingTimeInterval(-86_400)
         forecastHorizon = env.forecastHorizon(for: coordinate)
-        let end = max(forecastHorizon ?? start, start.addingTimeInterval(48 * 3600))
-        rangeStart = start; rangeEnd = end
+        let end = max(forecastHorizon ?? start, start.addingTimeInterval(11 * 86_400))
+        let entry = env.cache.entry(for: coordinate)
+        let key = [String(format: "%.4f,%.4f", coordinate.latitude, coordinate.longitude), "\(entry?.weatherFetchedAt?.timeIntervalSince1970 ?? 0)",
+                   "\(entry?.marineFetchedAt?.timeIntervalSince1970 ?? 0)", "\(store.revision)", "\(start.timeIntervalSince1970)", "\(end.timeIntervalSince1970)"].joined(separator: "|")
         let station = env.tideStation(near: coordinate)
         let tide = station.map { TideEngine(station: $0) }
-        tideExtremes = tide?.extremes(from: start, to: end) ?? []
         let inputs = env.inputs(for: coordinate)
-        let builder = env.builder(for: coordinate)
-        timeline = ScoreTimeline.compute(engine: engine, coordinate: coordinate, from: start, to: end, stepMinutes: 15, timeZone: timeZone) { t in
-            var e = builder.build(at: t, coordinate: coordinate, inputs: inputs, tide: tide, extremes: tideExtremes)
-            if let h = forecastHorizon, t > h { e.isForecast = true }
-            return e
+        if key != timelineKey {
+            timelineKey = key
+            rangeStart = start; rangeEnd = end
+            tideExtremes = tide?.extremes(from: start, to: end) ?? []
+            let builder = env.builder(for: coordinate)
+            let horizon = forecastHorizon
+            timeline = ScoreTimeline.compute(engine: engine, coordinate: coordinate, from: start, to: end, stepMinutes: 15, timeZone: timeZone) { t in
+                var e = builder.build(at: t, coordinate: coordinate, inputs: inputs, tide: tide, extremes: tideExtremes)
+                if let h = horizon, t > h { e.isForecast = true }
+                return e
+            }
+            tideCurve = stride(from: 0, through: end.timeIntervalSince(start), by: 600).compactMap { offset in
+                let t = start.addingTimeInterval(offset)
+                return tide.map { TidePoint(at: t, levelCm: $0.level(at: t)) }
+            }
+            sunTimesByDay = stride(from: 0, through: end.timeIntervalSince(start), by: 86_400).map { SunCalculator.times(on: start.addingTimeInterval($0), at: coordinate, timeZone: timeZone) }
         }
-        tideCurve = stride(from: 0, through: end.timeIntervalSince(start), by: 600).compactMap { offset in
-            let t = start.addingTimeInterval(offset)
-            return tide.map { TidePoint(at: t, levelCm: $0.level(at: t)) }
-        }
-        sunTimesByDay = stride(from: 0, through: end.timeIntervalSince(start), by: 86_400).map { SunCalculator.times(on: start.addingTimeInterval($0), at: coordinate, timeZone: timeZone) }
         let wind = inputs.weather.compactMap { s in s.windSpeedMS.map { (s.at, $0) } }
         events = ScoreEvents.upcoming(from: now, count: 3, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
 

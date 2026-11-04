@@ -14,6 +14,8 @@ enum DS {
         /// 予報が届かない先・低確信度
         static let faded = SwiftUI.Color.white.opacity(0.25)
         /// 月相アイコン（確定画像の薄い紫）
+        /// 潮位の曲線（海の青）
+        static let sea = SwiftUI.Color(red: 0.30, green: 0.62, blue: 0.95)
         static let moon = SwiftUI.Color(red: 0.56, green: 0.52, blue: 0.85)
         /// グラフのパネル・チップの枠なし面（#1C1C1E 相当）
         static let panel = SwiftUI.Color(red: 0.11, green: 0.11, blue: 0.12)
