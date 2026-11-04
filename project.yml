@@ -48,7 +48,10 @@ targets:
         NSCameraUsageDescription: 釣れた魚を撮影して記録します。
         NSPhotoLibraryUsageDescription: 釣行中に撮った写真を釣果として取り込みます。
         NSMotionUsageDescription: 釣行中の移動量を記録します。
-        UIBackgroundModes: [location, fetch, processing]
+        UIBackgroundModes: [location, fetch, processing, remote-notification]
+        # SwiftData/CloudKit と App Group の識別子。コードはこれを読む（Services/Persistence/PersistenceController.swift）
+        FogCloudKitContainerIdentifier: iCloud.${BUNDLE_ID_PREFIX}.fog
+        FogAppGroupIdentifier: group.${BUNDLE_ID_PREFIX}.fog
         BGTaskSchedulerPermittedIdentifiers:
           - ${BUNDLE_ID_PREFIX}.fog.refresh
     entitlements:

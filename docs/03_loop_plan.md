@@ -9,7 +9,7 @@
 | # | ループ | 状態 | PR | 備考 |
 | --- | --- | --- | --- | --- |
 | L0 | リポジトリ基盤と CI | done | main 直push (〜aebdfc6) | 2026-11-04 TestFlight build 5 を iPhone 16 Pro で確認、5タブ表示OK |
-| L1 | データモデルと永続化 | next | | L0 の TestFlight 確認を待たずに着手してよい |
+| L1 | データモデルと永続化 | in_progress | | ブランチ `claude/l1-start-78ajhc`（セッション指定のため `loop/L1-*` ではない） |
 | L2 | 天文計算と潮汐エンジン（Core） | pending | | |
 | L3 | 環境データ取得 | pending | | |
 | L4 | 釣行セッション自動検出 | pending | | |
