@@ -110,21 +110,34 @@ final class CaptureService {
     }
 
     /// 記録中の釣行。無ければ撮影位置で手動の釣行を始める（撮影は釣行の証拠）。
+    /// 位置が取れないときは (0, 0) の釣り場を作らず、ホームで選んだ釣り場 → 直近の釣行の釣り場 → 「位置不明」（未登録）の順で使う。
     private func ensureSession(at date: Date, coordinate: Coordinate?) async -> Core.Session {
         if let active = try? store.activeSession() { return active }
-        let location = coordinate ?? Coordinate(latitude: 0, longitude: 0)
         let spots = (try? store.spots()) ?? []
-        let near = spots.filter(\.isRegistered).min { Geo.distanceMeters($0.coordinate, location) < Geo.distanceMeters($1.coordinate, location) }
         let spot: Spot
-        if let near, Geo.distanceMeters(near.coordinate, location) <= SessionDetectionService.registeredSpotRadiusM {
-            spot = near
+        if let location = coordinate, location.isPlausible {
+            let near = spots.filter { $0.isRegistered && $0.coordinate.isPlausible }
+                .min { Geo.distanceMeters($0.coordinate, location) < Geo.distanceMeters($1.coordinate, location) }
+            if let near, Geo.distanceMeters(near.coordinate, location) <= SessionDetectionService.registeredSpotRadiusM {
+                spot = near
+            } else {
+                spot = Spot(name: "釣り場", coordinate: location, isRegistered: true, createdAt: date)
+                try? store.upsert(spot)
+            }
+        } else if let homeID = UserDefaults.standard.string(forKey: "fog.homeSpotID").flatMap(UUID.init(uuidString:)),
+                  let home = spots.first(where: { $0.id == homeID }) {
+            spot = home
+        } else if let last = (try? store.sessions())?.first, let lastSpot = spots.first(where: { $0.id == last.spotID }), lastSpot.coordinate.isPlausible {
+            spot = lastSpot
+        } else if let unknown = spots.first(where: { !$0.coordinate.isPlausible }) {
+            spot = unknown
         } else {
-            spot = Spot(name: "釣り場", coordinate: location, isRegistered: true, createdAt: date)
+            spot = Spot(name: "位置不明", coordinate: Coordinate(latitude: 0, longitude: 0), isRegistered: false, createdAt: date)
             try? store.upsert(spot)
         }
         let previous = (try? store.sessions())?.first
         let session = Core.Session(spotID: spot.id, startedAt: date, tackle: previous?.tackle, rigID: previous?.rigID,
-                                   track: [TrackSample(at: date, coordinate: location)], tackleID: previous?.tackleID, isAutoDetected: false)
+                                   track: [TrackSample(at: date, coordinate: (coordinate?.isPlausible == true ? coordinate : nil) ?? spot.coordinate)], tackleID: previous?.tackleID, isAutoDetected: false)
         try? store.upsert(session)
         return session
     }

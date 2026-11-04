@@ -186,6 +186,7 @@ final class SpotsViewModel {
     }
 
     func selectForHome(_ spot: Spot) {
+        guard spot.coordinate.isPlausible else { return }
         UserDefaults.standard.set(spot.id.uuidString, forKey: "fog.homeSpotID")
     }
 

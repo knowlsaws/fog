@@ -8,22 +8,20 @@ struct RootTabView: View {
     @Environment(AppServices.self) private var services
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                switch selected {
-                case .home: HomeView()
-                case .log: LogView()
-                case .capture: CaptureView()
-                case .guide: GuideView()
-                case .spots: SpotsView()
-                }
+        Group {
+            switch selected {
+            case .home: HomeView()
+            case .log: LogView()
+            case .capture: CaptureView()
+            case .guide: GuideView()
+            case .spots: SpotsView()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DS.Color.background)
-            .environment(\.captureTab, { selected = .capture })
-
-            tabBar
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DS.Color.background)
+        .environment(\.captureTab, { selected = .capture })
+        // タブバーは下のセーフエリアとして置く。各画面はタブバーを除いた高さを 100% として使える
+        .safeAreaInset(edge: .bottom, spacing: 0) { tabBar }
         .ignoresSafeArea(.keyboard)
         .onChange(of: services.router.pending) { _, link in
             guard let link else { return }
@@ -49,8 +47,8 @@ struct RootTabView: View {
             tabButton(.spots, system: "map")
         }
         .padding(.horizontal, DS.Spacing.l)
-        .padding(.top, DS.Spacing.m)
-        .padding(.bottom, DS.Spacing.m)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
         .background(
             DS.Color.surface
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: 28, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 28, style: .continuous))
@@ -59,11 +57,14 @@ struct RootTabView: View {
     }
 
     private func tabButton(_ tab: Tab, system: String) -> some View {
-        Button { selected = tab } label: {
+        Button {
+            if selected == tab { NotificationCenter.default.post(name: .fogHomeReselected, object: tab == .home ? tab : nil) }
+            selected = tab
+        } label: {
             Image(systemName: selected == tab ? system + ".fill" : system)
                 .font(.system(size: 22, weight: .regular))
                 .foregroundStyle(selected == tab ? DS.Color.textPrimary : DS.Color.textTertiary)
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: 40)
         }
         .buttonStyle(.plain)
     }
@@ -71,10 +72,10 @@ struct RootTabView: View {
     private var captureButton: some View {
         Button { selected = .capture } label: {
             ZStack {
-                Circle().fill(DS.Color.accent).frame(width: 64, height: 64)
-                    .shadow(color: DS.Color.accent.opacity(0.55), radius: 14)
+                Circle().fill(DS.Color.accent).frame(width: 56, height: 56)
+                    .shadow(color: DS.Color.accent.opacity(0.55), radius: 12)
                 Image(systemName: "camera.fill")
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity)
@@ -84,3 +85,7 @@ struct RootTabView: View {
     }
 }
 
+extension Notification.Name {
+    /// 表示中のタブをもう一度押したとき（ホームは今日に戻る）
+    static let fogHomeReselected = Notification.Name("fog.tabReselected")
+}

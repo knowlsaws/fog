@@ -84,7 +84,7 @@ struct CaptureView: View {
             chip(model.rig?.displayName ?? "リグ") { showRigPicker = true }
         }
         .padding(.horizontal, DS.Spacing.l)
-        .padding(.bottom, 96)
+        .padding(.bottom, DS.Spacing.l)
     }
 
     private func chip(_ text: String, action: @escaping () -> Void) -> some View {
@@ -237,7 +237,7 @@ struct ResultSheet: View {
             .padding(DS.Spacing.l)
             .background(DS.Color.surface.opacity(0.96), in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
             .padding(.horizontal, DS.Spacing.l)
-            .padding(.bottom, 190)
+            .padding(.bottom, 120)
             .onTapGesture { onDismiss() }
             .task {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)

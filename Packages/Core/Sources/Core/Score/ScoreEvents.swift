@@ -30,6 +30,8 @@ public enum ScoreEvents {
         }
         let sorted = wind.sorted { $0.0 < $1.0 }
         for (a, b) in zip(sorted, sorted.dropFirst()) {
+            // 丸めた値が同じ（5.4→5.0 など）ならしきい値をまたいでも出さない（「風 5→5m/s」になる）
+            if Int(a.1.rounded()) == Int(b.1.rounded()) { continue }
             if a.1 < windThresholdMS && b.1 >= windThresholdMS {
                 events.append(ScoreEvent(at: b.0, kind: .windUp, label: "風 \(Int(a.1.rounded()))→\(Int(b.1.rounded()))m/s", isPositive: false))
             } else if a.1 >= windThresholdMS && b.1 < windThresholdMS {

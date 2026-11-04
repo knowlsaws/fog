@@ -106,4 +106,12 @@ final class ModelBehaviourTests: XCTestCase {
         c.lengthCm = nil
         XCTAssertFalse(c.isSizeMeasured)
     }
+
+    func testCoordinatePlausibility() {
+        XCTAssertTrue(Coordinate(latitude: 41.77, longitude: 140.73).isPlausible)
+        XCTAssertFalse(Coordinate(latitude: 0, longitude: 0).isPlausible)
+        XCTAssertFalse(Coordinate(latitude: 0.1, longitude: -0.2).isPlausible)
+        XCTAssertFalse(Coordinate(latitude: 95, longitude: 10).isPlausible)
+        XCTAssertTrue(Coordinate(latitude: 0.0, longitude: 100).isPlausible)
+    }
 }

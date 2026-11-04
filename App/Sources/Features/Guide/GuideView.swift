@@ -34,7 +34,7 @@ struct GuideView: View {
                                 .onTapGesture { selected = e }
                         }
                     }
-                    .padding(.bottom, 100)
+                    .padding(.bottom, DS.Spacing.l)
                 }
             }
         }
