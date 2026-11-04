@@ -16,6 +16,7 @@ final class AppServices {
     let capture: CaptureService
     let photoImport: PhotoImportService
     let report: ReportService
+    let router = Router()
 
     init() {
         let persistence = PersistenceController.live()
@@ -45,8 +46,11 @@ final class AppServices {
         }
     }
 
+    var hookRecorder: HookEventRecorder { HookEventRecorder(store: store, detection: detection, scheduler: scheduler, capture: capture) }
+
     /// 起動時：ダミーデータ、通知、自動検出。
     func start() async {
+        RouterHolder.shared.router = router
         SampleSeeder.seedIfNeeded(store: store)
         await SessionNotifications.requestAuthorization()
         detection.start()

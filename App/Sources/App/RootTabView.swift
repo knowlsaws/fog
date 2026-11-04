@@ -5,6 +5,7 @@ import SwiftUI
 struct RootTabView: View {
     enum Tab: Hashable { case home, log, capture, guide, spots }
     @State private var selected: Tab = .home
+    @Environment(AppServices.self) private var services
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -23,6 +24,19 @@ struct RootTabView: View {
             tabBar
         }
         .ignoresSafeArea(.keyboard)
+        .onChange(of: services.router.pending) { _, link in
+            guard let link else { return }
+            switch link {
+            case .capture: selected = .capture
+            case .home: selected = .home
+            case .toggleTackle: services.capture.currentTackle = (services.capture.currentTackle ?? .spinning) == .spinning ? .bait : .spinning
+            case .hookLost: services.hookRecorder.record(.lost)
+            }
+            services.router.pending = nil
+        }
+        .onAppear {
+            if services.router.pending == .capture { selected = .capture; services.router.pending = nil }
+        }
     }
 
     private var tabBar: some View {
@@ -65,4 +79,3 @@ struct RootTabView: View {
     }
 }
 
-#Preview { RootTabView() }

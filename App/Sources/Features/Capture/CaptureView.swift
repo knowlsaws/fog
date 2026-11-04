@@ -7,6 +7,8 @@ struct CaptureView: View {
     @Environment(AppServices.self) private var services
     @State private var model = CaptureViewModel()
     @State private var showRigPicker = false
+    @State private var showHookMenu = false
+    @State private var toast: String?
 
     var body: some View {
         ZStack {
@@ -26,6 +28,13 @@ struct CaptureView: View {
                 ResultSheet(outcome: result, onChoose: { model.choose(species: $0) }, onDismiss: { model.dismissResult() })
                     .transition(.move(edge: .bottom))
             }
+            if let toast {
+                VStack { Spacer(); Text(toast).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                    .padding(.horizontal, DS.Spacing.l).padding(.vertical, DS.Spacing.s)
+                    .background(DS.Color.surface.opacity(0.95), in: Capsule()).padding(.bottom, 200) }
+                    .transition(.opacity)
+                    .task { try? await Task.sleep(nanoseconds: 1_200_000_000); self.toast = nil }
+            }
         }
         .animation(.easeInOut(duration: 0.25), value: model.result?.catchRecord.id)
         .onAppear { model.attach(services: services); model.start() }
@@ -35,13 +44,22 @@ struct CaptureView: View {
 
     private var header: some View {
         HStack {
+            Button { services.router.pending = .home } label: {
+                Image(systemName: "xmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(DS.Color.textSecondary).frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
             Spacer()
             VStack(spacing: 2) {
                 Text(model.spotName.isEmpty ? "—" : model.spotName).font(DS.Font.label).foregroundStyle(DS.Color.textSecondary)
                 Text(Date.now, format: .dateTime.hour().minute()).font(DS.Font.number(13)).foregroundStyle(DS.Color.textTertiary)
             }
             Spacer()
+            Button { model.toggleTorch() } label: {
+                Image(systemName: model.torchOn ? "bolt.fill" : "bolt.slash").font(.system(size: 16, weight: .semibold)).foregroundStyle(model.torchOn ? DS.Color.accent : DS.Color.textSecondary).frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
         }
+        .padding(.horizontal, DS.Spacing.m)
         .padding(.top, DS.Spacing.m)
     }
 
@@ -49,18 +67,20 @@ struct CaptureView: View {
         HStack(alignment: .center) {
             chip(model.tackle == .spinning ? "スピニング" : "ベイト") { model.toggleTackle() }
             Spacer()
-            Button {
-                Task { await model.shutter() }
-            } label: {
-                ZStack {
-                    Circle().stroke(Color.white.opacity(0.6), lineWidth: 3).frame(width: 84, height: 84)
-                    Circle().fill(DS.Color.accent).frame(width: 70, height: 70)
-                        .opacity(model.isSaving ? 0.5 : 1)
-                }
+            ZStack {
+                Circle().stroke(Color.white.opacity(0.6), lineWidth: 3).frame(width: 84, height: 84)
+                Circle().fill(DS.Color.accent).frame(width: 70, height: 70)
+                    .opacity(model.isSaving ? 0.5 : 1)
             }
-            .buttonStyle(.plain)
-            .disabled(model.isSaving)
+            .contentShape(Circle())
+            .onTapGesture { Task { await model.shutter() } }
+            .onLongPressGesture(minimumDuration: 0.5) { showHookMenu = true }
             .accessibilityLabel("撮影")
+            .confirmationDialog("針", isPresented: $showHookMenu, titleVisibility: .hidden) {
+                Button("針ロスト") { services.hookRecorder.record(.lost); toast = "針ロストを記録" }
+                Button("針追加") { services.hookRecorder.record(.added); toast = "針追加を記録" }
+                Button("キャンセル", role: .cancel) {}
+            }
             Spacer()
             chip(model.rig?.displayName ?? "リグ") { showRigPicker = true }
         }

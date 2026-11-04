@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AVFoundation
 import Core
 
 /// 撮影画面の状態。ARKit のフレームを間引いて輪郭・全長をライブ計算し、シャッターで釣果にする。
@@ -18,6 +19,7 @@ final class CaptureViewModel {
     private(set) var result: CaptureService.Outcome?
     private(set) var isSaving = false
     private(set) var spotName: String = ""
+    private(set) var torchOn = false
     var tackle: TackleKind = .spinning
     var rig: Rig?
     var rigs: [Rig] = []
@@ -88,6 +90,17 @@ final class CaptureViewModel {
     }
 
     func dismissResult() { result = nil }
+
+    /// 夜のライト（LiDAR は暗くても測れるが、輪郭検出には光が要る）。
+    func toggleTorch() {
+        guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return }
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = torchOn ? .off : .on
+            device.unlockForConfiguration()
+            torchOn.toggle()
+        } catch {}
+    }
 
     func choose(species: String) {
         guard let result, let capture else { return }
