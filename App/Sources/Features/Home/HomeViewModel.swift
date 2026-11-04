@@ -54,6 +54,21 @@ final class HomeViewModel {
     private(set) var dayDetail: [EnvSnapshot] = []
     private(set) var seaSurfaceTempC: Double?
     private(set) var nextFetchAt: Date?
+    /// 今の潮位（cm）と変化率（cm/時、正で上げ）
+    private(set) var nowTideLevelCm: Double?
+    private(set) var nowTideRateCmPerHour: Double?
+    /// 表示中の日の日の出入・月の出入
+    private(set) var daySun: SunTimes?
+    private(set) var dayMoon: MoonTimes?
+    /// 週間の見通し（今日から 7 日）：その日の最高釣れ率と昼の天気
+    struct DayOutlook: Identifiable {
+        let offset: Int
+        let dayStart: Date
+        let maxScore: Int
+        let conditionCode: String?
+        var id: Int { offset }
+    }
+    private(set) var weekOutlook: [DayOutlook] = []
 
     private var services: AppServices?
     private let cache = AnalysisCache()
@@ -143,7 +158,10 @@ final class HomeViewModel {
             sunTimesByDay = stride(from: 0, through: end.timeIntervalSince(start), by: 86_400).map { SunCalculator.times(on: start.addingTimeInterval($0), at: coordinate, timeZone: timeZone) }
         }
         updateDay()
+        updateWeekOutlook()
         seaSurfaceTempC = current.seaSurfaceTempC
+        nowTideLevelCm = current.tideLevelCm
+        nowTideRateCmPerHour = current.tideRateCmPerHour
         nextFetchAt = env.gate.nextAllowed("weather:" + ForecastCache.key(for: coordinate))
         let wind = inputs.weather.compactMap { s in s.windSpeedMS.map { (s.at, $0) } }
         events = ScoreEvents.upcoming(from: now, count: 3, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
@@ -182,6 +200,28 @@ final class HomeViewModel {
         if let services {
             dayDetail = stride(from: 0, to: 24, by: 3).map { h in services.environment.snapshot(at: dayStart.addingTimeInterval(Double(h) * 3600), coordinate: coordinate) }
         }
+        let noon = dayStart.addingTimeInterval(12 * 3600)
+        daySun = SunCalculator.times(on: noon, at: coordinate, timeZone: timeZone)
+        dayMoon = MoonCalculator.times(on: noon, at: coordinate, timeZone: timeZone)
+    }
+
+    /// 今日から 7 日分：各日の最高釣れ率と昼 12 時の天気
+    private func updateWeekOutlook() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
+        let today = cal.startOfDay(for: now)
+        var out: [DayOutlook] = []
+        for offset in 0..<7 {
+            let start = today.addingTimeInterval(Double(offset) * 86_400)
+            let end = start.addingTimeInterval(86_400)
+            guard start < rangeEnd else { break }
+            let points = timeline.filter { $0.at >= start && $0.at < end }
+            guard let best = points.map(\.score).max() else { continue }
+            let noon = start.addingTimeInterval(12 * 3600)
+            let cond = services.map { $0.environment.snapshot(at: noon, coordinate: coordinate).conditionCode } ?? nil
+            let beyond = forecastHorizon.map { noon > $0 } ?? true
+            out.append(DayOutlook(offset: offset, dayStart: start, maxScore: best, conditionCode: beyond ? nil : cond))
+        }
+        weekOutlook = out
     }
 
     /// イベント列のタップ：その時刻の日へ
