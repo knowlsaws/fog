@@ -62,3 +62,7 @@ L1〜L15 がマージされたら、`docs/06_device_verification.md` のチェ�
 ## 6. リポジトリを非公開にするとき
 
 完成後に Settings → General → Danger Zone → Change visibility。Secrets と Actions はそのまま使える。
+
+非公開にすると GitHub Actions の実行時間が課金枠（Free プランは月 2,000 分、macOS は 10 倍換算）の対象になる。
+そのため `ios-build` は PR と手動実行だけで動き（push では動かない）、同じブランチの連続実行は前のものを打ち切る。
+`testflight`（macOS、1 回 4〜5 分）は main へのマージごとに動くので、まとめてマージする。使用量は Settings → Billing → Usage で見られる。
