@@ -6,8 +6,13 @@ enum DS {
         static let background = SwiftUI.Color(red: 0.043, green: 0.043, blue: 0.047)   // #0B0B0C
         static let surface = SwiftUI.Color(red: 0.11, green: 0.11, blue: 0.12)
         static let surfaceRaised = SwiftUI.Color(red: 0.16, green: 0.16, blue: 0.17)
-        static let accent = SwiftUI.Color(red: 1.0, green: 0.478, blue: 0.102)          // #FF7A1A
-        static let secondary = SwiftUI.Color(red: 0.45, green: 0.62, blue: 0.47)        // muted green
+        /// テーマ色：緑（2026-11-04 実機フィードバックでオレンジ #FF7A1A から変更）
+        static let accent = SwiftUI.Color(red: 0.45, green: 0.62, blue: 0.47)           // #739E78
+        static let secondary = SwiftUI.Color(red: 0.45, green: 0.62, blue: 0.47)        // muted green（accent と同じ）
+        /// マズメの帯（黄）
+        static let sun = SwiftUI.Color(red: 0.96, green: 0.77, blue: 0.26)              // #F5C542
+        /// 日の出・日の入（オレンジ）
+        static let daylight = SwiftUI.Color(red: 1.0, green: 0.478, blue: 0.102)        // #FF7A1A
         static let textPrimary = SwiftUI.Color.white
         static let textSecondary = SwiftUI.Color.white.opacity(0.7)
         static let textTertiary = SwiftUI.Color.white.opacity(0.4)

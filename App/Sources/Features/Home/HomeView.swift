@@ -148,9 +148,9 @@ struct HomeView: View {
     private func iconColor(_ chip: HomeViewModel.Chip) -> Color {
         if chip.tone == .bad { return DS.Color.textTertiary }
         switch chip.kind {
-        case .tide, .light: return DS.Color.accent
-        case .wind: return DS.Color.secondary
-        case .weather: return DS.Color.textPrimary
+        case .tide: return DS.Color.sea
+        case .light: return DS.Color.sun
+        case .wind, .weather: return DS.Color.textPrimary
         }
     }
 
@@ -272,11 +272,23 @@ struct ForecastChart: View {
     private let tideBand: ClosedRange<Double> = 4...62
     private let hours = Array(stride(from: 0, to: 24, by: 3))
 
+    @State private var tapped: Date?
+
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: DS.Spacing.xs) {
                 dayHeader.frame(height: 22)
-                chart.frame(height: geo.size.height * 0.37)
+                chart
+                    .chartOverlay { proxy in
+                        GeometryReader { g in
+                            Rectangle().fill(.clear).contentShape(Rectangle())
+                                .onTapGesture { location in
+                                    let origin = g[proxy.plotFrame!].origin
+                                    if let d: Date = proxy.value(atX: location.x - origin.x) { tapped = min(max(d, model.dayStart), model.dayEnd) }
+                                }
+                        }
+                    }
+                    .frame(height: geo.size.height * 0.37)
                 detailTable
                 weekRow.frame(height: 44)
                 footer.frame(height: 16)
@@ -289,8 +301,13 @@ struct ForecastChart: View {
             .gesture(DragGesture(minimumDistance: 30).onEnded { v in
                 if v.translation.width < -30 { step(+1) } else if v.translation.width > 30 { step(-1) }
             })
+            .sheet(item: Binding(get: { tapped.map { TappedTime(date: $0) } }, set: { tapped = $0?.date })) { t in
+                DayDetailSheet(model: model, at: t.date, twilights: twilightBands.map { ($0.label, $0.start, $0.end) }).presentationDetents([.large])
+            }
         }
     }
+
+    private struct TappedTime: Identifiable { let date: Date; var id: Date { date } }
 
     /// 「2026/11/04(水)」
     static func dayLabel(_ date: Date, timeZone: TimeZone) -> String {
@@ -324,24 +341,22 @@ struct ForecastChart: View {
 
     private var chart: some View {
         Chart {
-            ForEach(dayShading, id: \.0) { (start, end) in
-                RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
-                    .foregroundStyle(Color.black.opacity(0.28))
-            }
+            // 夜の濃い背景は出さない（日の出入は線で分かる。2026-11-04 実機フィードバック）
             // 潮止まりの帯（満干の前後 30 分、薄いグレー）。文字なし
             ForEach(model.dayExtremes, id: \.at) { e in
                 RectangleMark(xStart: .value("s", e.at.addingTimeInterval(-30 * 60)), xEnd: .value("e", e.at.addingTimeInterval(30 * 60)), yStart: .value("y0", 0), yEnd: .value("y1", 100))
                     .foregroundStyle(Color.white.opacity(0.07))
             }
-            // 朝マズメ・夕マズメの帯（薄いオレンジ）。上端に名前
+            // 朝マズメ・夕マズメの帯（黄）。文字なし。時刻はグラフをタップした詳細で
             ForEach(twilightBands, id: \.start) { b in
                 RectangleMark(xStart: .value("s", b.start), xEnd: .value("e", b.end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
-                    .foregroundStyle(DS.Color.accent.opacity(0.13))
-                PointMark(x: .value("時刻", b.start), y: .value("y", 100))
-                    .symbolSize(0)
-                    .annotation(position: .bottomTrailing, spacing: 0, overflowResolution: .init(x: .fit(to: .plot), y: .fit(to: .plot))) {
-                        Text(b.label).font(.system(size: 8, weight: .semibold)).foregroundStyle(DS.Color.accent)
-                    }
+                    .foregroundStyle(DS.Color.sun.opacity(0.18))
+            }
+            // 太陽が出ている時間（黄の横線、両端が日の出・日の入）と月が出ている時間（紫の横線）
+            ForEach(skySpans, id: \.start) { span in
+                RuleMark(xStart: .value("s", span.start), xEnd: .value("e", span.end), y: .value("y", span.isSun ? 91 : 83))
+                    .foregroundStyle((span.isSun ? DS.Color.daylight : DS.Color.moon).opacity(0.8))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round))
             }
             ForEach(model.dayTide) { p in
                 AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("潮位", tideY(p.levelCm)), series: .value("系列", "潮位面"))
@@ -376,11 +391,11 @@ struct ForecastChart: View {
                             Image(systemName: m.isSun ? "sun.max.fill" : "moon.fill").font(.system(size: 7))
                             Text(m.at, format: .dateTime.hour().minute()).font(DS.Font.number(8))
                         }
-                        .foregroundStyle(m.isSun ? DS.Color.accent : DS.Color.moon)
+                        .foregroundStyle(m.isSun ? DS.Color.daylight : DS.Color.moon)
                     }
             }
             if model.now >= model.dayStart && model.now <= model.dayEnd {
-                RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.secondary).lineStyle(StrokeStyle(lineWidth: 1.5))
+                RuleMark(x: .value("今", model.now)).foregroundStyle(Color.white.opacity(0.9)).lineStyle(StrokeStyle(lineWidth: 1.5))
                 if let level = model.nowTideLevelCm {
                     PointMark(x: .value("今", model.now), y: .value("潮位", tideY(level)))
                         .foregroundStyle(DS.Color.sea)
@@ -505,6 +520,27 @@ struct ForecastChart: View {
         return out
     }
 
+    private struct SkySpan { let start: Date; let end: Date; let isSun: Bool }
+
+    /// 太陽・月が出ている区間（表示中の日に切り詰める。月は日をまたぐことがある）
+    private var skySpans: [SkySpan] {
+        var out: [SkySpan] = []
+        let r = model.dayStart...model.dayEnd
+        func clip(_ a: Date, _ b: Date, sun: Bool) {
+            let s = max(a, r.lowerBound), e = min(b, r.upperBound)
+            if s < e { out.append(SkySpan(start: s, end: e, isSun: sun)) }
+        }
+        if let rise = model.daySun?.sunrise, let set = model.daySun?.sunset { clip(rise, set, sun: true) }
+        if let rise = model.dayMoon?.moonrise, let set = model.dayMoon?.moonset {
+            if rise < set { clip(rise, set, sun: false) } else { clip(model.dayStart, set, sun: false); clip(rise, model.dayEnd, sun: false) }
+        } else if let rise = model.dayMoon?.moonrise {
+            clip(rise, model.dayEnd, sun: false)
+        } else if let set = model.dayMoon?.moonset {
+            clip(model.dayStart, set, sun: false)
+        }
+        return out
+    }
+
     private struct TwilightBand { let start: Date; let end: Date; let label: String }
 
     /// 朝マズメ（市民薄明の始まり〜日の出 30 分後）と夕マズメ（日の入 30 分前〜市民薄明の終わり）。チップと同じ定義
@@ -581,6 +617,58 @@ struct ForecastChart: View {
         return out.compactMap { (s, e) in
             let a = max(s, model.dayStart), b = min(e, model.dayEnd)
             return a < b ? (a, b) : nil
+        }
+    }
+}
+
+/// グラフをタップしたときの詳細：その時刻の数値と、その日の時刻一覧（マズメ・日の出入・月の出入・満干）。
+struct DayDetailSheet: View {
+    let model: HomeViewModel
+    let at: Date
+    let twilights: [(String, Date, Date)]
+    @Environment(AppServices.self) private var services
+
+    var body: some View {
+        let env = services.environment.snapshot(at: at, coordinate: model.coordinate)
+        let score = model.dayTimeline.min { abs($0.at.timeIntervalSince(at)) < abs($1.at.timeIntervalSince(at)) }?.score
+        VStack(alignment: .leading, spacing: DS.Spacing.m) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(ForecastChart.dayLabel(at, timeZone: model.timeZone)).font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
+                Text(at, format: .dateTime.hour().minute()).font(DS.Font.number(24)).foregroundStyle(DS.Color.textPrimary)
+                Spacer()
+                if let score { Text("\(score)").font(DS.Font.score(32)).foregroundStyle(DS.Color.accent) }
+            }
+            VStack(spacing: DS.Spacing.s) {
+                row("潮位", env.tideLevelCm.map { "\(Int($0.rounded())) cm " + (((env.tideRateCmPerHour ?? 0) > 2) ? "上げ" : ((env.tideRateCmPerHour ?? 0) < -2 ? "下げ" : "潮止まり")) }, color: DS.Color.sea)
+                row("潮", env.tideName, color: DS.Color.sea)
+                row("気温", env.airTemperatureC.map { String(format: "%.1f°", $0) })
+                row("風", env.windSpeedMS.map { String(format: "%.1f m/s ", $0) + (env.windDirectionDeg.map { HomeViewModel.compass($0) } ?? "") })
+                row("降水確率", env.precipitationChance.map { "\(Int(($0 * 100).rounded()))%" })
+                row("波高", env.waveHeightM.map { String(format: "%.1f m", $0) })
+                row("水温", env.seaSurfaceTempC.map { String(format: "%.1f°", $0) })
+                row("気圧", env.pressureHPa.map { String(format: "%.0f hPa", $0) })
+            }
+            Divider().overlay(DS.Color.faded)
+            VStack(spacing: DS.Spacing.s) {
+                ForEach(twilights, id: \.1) { t in row(t.0, time(t.1) + "〜" + time(t.2), color: DS.Color.sun) }
+                row("日の出 / 日の入", [model.daySun?.sunrise, model.daySun?.sunset].map { $0.map(time) ?? "—" }.joined(separator: " / "), color: DS.Color.daylight)
+                row("月の出 / 月の入", [model.dayMoon?.moonrise, model.dayMoon?.moonset].map { $0.map(time) ?? "—" }.joined(separator: " / "), color: DS.Color.moon)
+                ForEach(model.dayExtremes, id: \.at) { e in row(e.kind == .high ? "満潮" : "干潮", time(e.at) + "  \(Int(e.levelCm.rounded())) cm", color: DS.Color.sea) }
+            }
+            Spacer()
+        }
+        .padding(DS.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.Color.background)
+    }
+
+    private func time(_ d: Date) -> String { HomeViewModel.clock(d, timeZone: model.timeZone) }
+
+    private func row(_ label: String, _ value: String?, color: Color = DS.Color.textPrimary) -> some View {
+        HStack {
+            Text(label).font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
+            Spacer()
+            Text(value ?? "—").font(DS.Font.number(15)).foregroundStyle(value == nil ? DS.Color.textTertiary : color)
         }
     }
 }

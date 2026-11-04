@@ -26,7 +26,7 @@
 - Xcode プロジェクトは **XcodeGen** (`project.yml`) で生成する。`.xcodeproj` はコミットしない
 - 純粋ロジック（潮汐・釣れ率・統計・天文計算・モデル）は `Packages/Core` に置き、**Linux の `swift test` で検証できる**ようにする（Foundation 以外に依存しない）
 - iOS 依存（SwiftUI, CoreLocation, WeatherKit, ARKit/LiDAR, CoreML, WidgetKit, CloudKit）は `App/` に置く
-- デザイン: ダーク固定、背景 #0B0B0C、アクセント #FF7A1A（オレンジ）、補助 緑。枠線なし、文字最小、SF Pro / 数字は SF Pro Rounded。`App/Sources/DesignSystem/` のトークンを必ず使う
+- デザイン: ダーク固定、背景 #0B0B0C、アクセント #739E78（緑。2026-11-04 にオレンジから変更）、潮は青 #4D9EF2、マズメは黄 #F5C542、日の出入はオレンジ #FF7A1A、月は紫、現在線は白。枠線なし、文字最小、SF Pro / 数字は SF Pro Rounded。`App/Sources/DesignSystem/` のトークンを必ず使う
 - 全画面は縦スクロールなしの1画面に収める（例外: 図鑑グリッドのみ縦スクロール可）
 
 ## ループの回し方（必ずこの手順）
