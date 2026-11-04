@@ -10,7 +10,7 @@ let package = Package(
     targets: [
         .target(
             name: "Core",
-            resources: [.copy("Resources")]
+            resources: [.copy("Data")]
         ),
         .testTarget(
             name: "CoreTests",
