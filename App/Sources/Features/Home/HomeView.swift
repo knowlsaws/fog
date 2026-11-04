@@ -276,8 +276,9 @@ struct ForecastChart: View {
         GeometryReader { geo in
             VStack(spacing: DS.Spacing.xs) {
                 dayHeader.frame(height: 22)
-                chart.frame(height: geo.size.height * 0.40)
+                chart.frame(height: geo.size.height * 0.37)
                 detailTable
+                weekRow.frame(height: 44)
                 footer.frame(height: 16)
             }
             .padding(.horizontal, DS.Spacing.m)
@@ -358,8 +359,40 @@ struct ForecastChart: View {
                     .interpolationMethod(.catmullRom)
                     .lineStyle(StrokeStyle(lineWidth: 1.6))
             }
+            // 良い時間帯の帯：グラフの底にぴったり付ける（55 以上オレンジ、40 未満は暗いグレー）
+            ForEach(Array(model.dayTimeline.enumerated()), id: \.element.at) { i, p in
+                let next = i + 1 < model.dayTimeline.count ? model.dayTimeline[i + 1].at : p.at.addingTimeInterval(15 * 60)
+                RectangleMark(xStart: .value("s", p.at), xEnd: .value("e", next), yStart: .value("y0", 0), yEnd: .value("y1", 3.5))
+                    .foregroundStyle(p.score >= 55 ? DS.Color.accent : (p.score < 40 ? Color.white.opacity(0.10) : Color.white.opacity(0.28)))
+            }
+            // 日の出入（オレンジ）と月の出入（紫）
+            ForEach(sunMoonMarks, id: \.at) { m in
+                PointMark(x: .value("時刻", m.at), y: .value("y", m.y))
+                    .symbolSize(0)
+                    .annotation(position: .bottom, spacing: 0) {
+                        HStack(spacing: 1) {
+                            Image(systemName: m.isSun ? "sun.max.fill" : "moon.fill").font(.system(size: 7))
+                            Text(m.at, format: .dateTime.hour().minute()).font(DS.Font.number(8))
+                        }
+                        .foregroundStyle(m.isSun ? DS.Color.accent : DS.Color.moon)
+                    }
+            }
             if model.now >= model.dayStart && model.now <= model.dayEnd {
                 RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.secondary).lineStyle(StrokeStyle(lineWidth: 1.5))
+                if let level = model.nowTideLevelCm {
+                    PointMark(x: .value("今", model.now), y: .value("潮位", tideY(level)))
+                        .foregroundStyle(DS.Color.sea)
+                        .symbolSize(40)
+                        .annotation(position: .topLeading, spacing: 4) {
+                            HStack(spacing: 2) {
+                                Text("\(Int(level.rounded()))cm").font(DS.Font.number(10))
+                                Image(systemName: (model.nowTideRateCmPerHour ?? 0) > 0 ? "arrow.up" : ((model.nowTideRateCmPerHour ?? 0) < 0 ? "arrow.down" : "minus")).font(.system(size: 8, weight: .bold))
+                            }
+                            .foregroundStyle(DS.Color.sea)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(DS.Color.background.opacity(0.9), in: Capsule())
+                        }
+                }
             }
         }
         .chartXScale(domain: model.dayStart...model.dayEnd)
@@ -369,6 +402,14 @@ struct ForecastChart: View {
                 AxisGridLine().foregroundStyle(DS.Color.faded.opacity(0.5))
                 AxisValueLabel {
                     if let v = value.as(Int.self) { Text("\(v)").font(DS.Font.number(9)).foregroundStyle(DS.Color.textTertiary) }
+                }
+            }
+            // 右軸：潮位 cm（釣れ率の目盛りに写した位置に、元の cm を書く）
+            AxisMarks(position: .trailing, values: tideTicks.map { tideY($0) }) { value in
+                AxisValueLabel {
+                    if let y = value.as(Double.self), let cm = tideTicks.min(by: { abs(tideY($0) - y) < abs(tideY($1) - y) }) {
+                        Text("\(Int(cm))").font(DS.Font.number(9)).foregroundStyle(DS.Color.sea)
+                    }
                 }
             }
         }
@@ -387,7 +428,7 @@ struct ForecastChart: View {
     /// 3 時間ごとの詳細（天気・気温・雨・風向・風速・波高）
     private var detailTable: some View {
         let cols = model.dayDetail
-        return VStack(spacing: 2) {
+        return VStack(spacing: 1) {
             tableRow("時刻") { i in Text("\(hours[i])").font(DS.Font.number(10)).foregroundStyle(DS.Color.textSecondary) }
             tableRow("天気") { i in
                 Image(systemName: HomeViewModel.weatherSymbol(cols[i].conditionCode))
@@ -434,6 +475,54 @@ struct ForecastChart: View {
                 Text("次回更新 ").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) + Text(n, format: .dateTime.hour().minute()).font(DS.Font.number(10)).foregroundStyle(DS.Color.textTertiary)
             }
         }
+    }
+
+    private struct SkyMark { let at: Date; let y: Double; let isSun: Bool }
+
+    /// 表示中の日の日の出入・月の出入（上端の少し下に置く）
+    private var sunMoonMarks: [SkyMark] {
+        var out: [SkyMark] = []
+        let r = model.dayStart...model.dayEnd
+        for d in [model.daySun?.sunrise, model.daySun?.sunset].compactMap({ $0 }) where r.contains(d) { out.append(SkyMark(at: d, y: 100, isSun: true)) }
+        for d in [model.dayMoon?.moonrise, model.dayMoon?.moonset].compactMap({ $0 }) where r.contains(d) { out.append(SkyMark(at: d, y: 91, isSun: false)) }
+        return out
+    }
+
+    /// 右軸の目盛り（潮位 cm の切りのよい値）
+    private var tideTicks: [Double] {
+        let r = tideRange
+        let span = r.upperBound - r.lowerBound
+        let step: Double = span > 150 ? 50 : (span > 60 ? 20 : 10)
+        var ticks: [Double] = []
+        var v = (r.lowerBound / step).rounded(.up) * step
+        while v <= r.upperBound { ticks.append(v); v += step }
+        return ticks
+    }
+
+    /// 週間の見通し：曜日・昼の天気・最高釣れ率。選択中はオレンジ。タップでその日へ
+    private var weekRow: some View {
+        HStack(spacing: 4) {
+            ForEach(model.weekOutlook) { d in
+                let selected = d.offset == model.dayOffset
+                Button { withAnimation(.easeInOut(duration: 0.2)) { model.dayOffset = d.offset } } label: {
+                    VStack(spacing: 1) {
+                        Text(Self.shortDay(d.dayStart, timeZone: model.timeZone)).font(.system(size: 9, weight: .semibold)).foregroundStyle(selected ? DS.Color.background : DS.Color.textTertiary)
+                        Image(systemName: d.conditionCode.map { HomeViewModel.weatherSymbol($0) } ?? "minus")
+                            .font(.system(size: 11)).foregroundStyle(selected ? DS.Color.background : DS.Color.textSecondary)
+                        Text("\(d.maxScore)").font(DS.Font.number(14)).foregroundStyle(selected ? DS.Color.background : DS.Color.textPrimary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(selected ? DS.Color.accent : DS.Color.surfaceRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// 「04(水)」
+    static func shortDay(_ date: Date, timeZone: TimeZone) -> String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "ja_JP"); f.timeZone = timeZone; f.dateFormat = "dd(E)"
+        return f.string(from: date)
     }
 
     /// 潮位（cm）を釣れ率の目盛りの下帯に写す
