@@ -12,7 +12,7 @@ Claude Code がループを回し始める前に、一度だけ必要な作業�
    - `APPLE_TEAM_ID`
    - `ASC_KEY_ID`
    - `ASC_ISSUER_ID`
-   - `ASC_PRIVATE_KEY`（.p8 の中身を base64 にしたもの。iPad なら Shortcuts の「Base64 エンコード」で可）
+   - `ASC_PRIVATE_KEY`（.p8 の中身。生テキストでも base64 でも可。iPad なら Shortcuts で「ファイルを選択」→「Base64 エンコード」→「クリップボードにコピー」）
 4. Settings → Actions → General → Workflow permissions を「Read and write」にする（Claude Code が PR を作るため）
 
 Secrets が揃うまで `testflight` ワークフローは自動でスキップされる（`BUNDLE_ID_PREFIX` が空なら動かない）。`ios-build` と `core-tests` は Secrets なしで動く。
