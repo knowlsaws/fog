@@ -1,10 +1,14 @@
 name: ios-build
 
+# プライベートリポジトリでは macOS ランナーの時間が 10 倍換算で課金枠を消費するため、
+# push では動かさず PR と手動実行だけにする。同じブランチの連続実行は前のものを打ち切る。
 on:
-  push:
-    branches: ["**"]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ios-build-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 env:
   BUNDLE_ID_PREFIX: ${{ vars.BUNDLE_ID_PREFIX || 'com.example' }}

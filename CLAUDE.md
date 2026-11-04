@@ -35,7 +35,7 @@
 2. ブランチ `loop/L{番号}-{slug}` を main から切る。
 3. そのループの「受け入れ条件」をすべて満たすまで実装する。
    - `Packages/Core` の変更は `cd Packages/Core && swift test` をローカル（Linux）で通す。
-   - iOS 側の変更は push して CI (`.github/workflows/ios-build.yml`) を回す。ローカルではビルドできない。
+   - iOS 側の変更は PR を作ると CI (`.github/workflows/ios-build.yml`) が回る（push だけでは回らない。手動は Actions の Run workflow）。ローカルではビルドできない。リポジトリは非公開で macOS ランナーは 10 倍換算なので、細かい push を重ねず PR 単位で回す。
    - CI の結果は `gh run list --branch <branch>` → `gh run view <id> --log-failed` で読む。赤なら直して push。**緑になるまでループを終えない**。
 4. 緑になったら PR を作る。本文にそのループの受け入れ条件をチェックリストで貼り、満たしたものにチェックする。
 5. `docs/03_loop_plan.md` の状態表を更新（`in_progress` → `review`）。設計判断があれば `docs/04_decisions.md` に追記。
