@@ -1,0 +1,45 @@
+name: tide-data
+
+# 気象庁の分潮一覧表（全地点）と函館の潮位表テキスト（検証用）を取得し、
+# data/tide/harmonics.json と Core 同梱データ、テストフィクスチャを更新してコミットする。
+# 年1回（1月）と手動実行。Claude Code の実行環境からは気象庁に届かないので CI で行う。
+
+on:
+  push:
+    paths: ["scripts/fetch_jma_harmonics.py", ".github/workflows/tide-data.yml"]
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "取得する年（空なら今年）"
+        required: false
+        default: ""
+  schedule:
+    - cron: "17 3 5 1 *"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch JMA harmonics and Hakodate tide table
+        run: |
+          YEAR="${{ inputs.year }}"
+          if [ -z "$YEAR" ]; then YEAR=$(date -u +%Y); fi
+          python3 -I scripts/fetch_jma_harmonics.py --year "$YEAR" \
+            --out data/tide/harmonics.json \
+            --core-data Packages/Core/Sources/Core/Data/harmonics.json \
+            --fixture-dir Packages/Core/Tests/CoreTests/Fixtures \
+            --fixture-stations 函館 東京
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/tide Packages/Core/Sources/Core/Data Packages/Core/Tests/CoreTests/Fixtures
+          if git diff --cached --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "data: 気象庁の分潮データと潮位表フィクスチャを更新（CI）"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"

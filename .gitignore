@@ -25,3 +25,9 @@ Package.resolved
 
 # CI が暗号化して保存する署名証明書（scripts/ci/signing/README.md）
 !scripts/ci/signing/*.enc
+
+# Python
+__pycache__/
+
+# ワークツリー
+.worktrees/

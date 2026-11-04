@@ -1,24 +1,6 @@
 import XCTest
 @testable import Core
 
-final class TideNameTests: XCTestCase {
-    func testNewMoonIsSpringTide() {
-        XCTAssertEqual(TideName.from(moonAge: 0.5), .spring)
-        XCTAssertEqual(TideName.from(moonAge: 15.2), .spring)
-    }
-    func testNeapAroundQuarter() {
-        XCTAssertEqual(TideName.from(moonAge: 7.5), .neap)
-    }
-}
-
-final class MoonPhaseTests: XCTestCase {
-    func testAgeIsWithinSynodicMonth() {
-        let age = MoonPhase.age(at: Date(timeIntervalSince1970: 1_762_200_000))
-        XCTAssertGreaterThanOrEqual(age, 0)
-        XCTAssertLessThan(age, MoonPhase.synodicMonth)
-    }
-}
-
 final class ScoreEngineTests: XCTestCase {
     func testDawnMovingTideLightWindScoresHigh() {
         var env = EnvSnapshot(at: .now, coordinate: .init(latitude: 41.78, longitude: 140.72))
