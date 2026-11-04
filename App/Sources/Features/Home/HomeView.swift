@@ -328,6 +328,21 @@ struct ForecastChart: View {
                 RectangleMark(xStart: .value("s", start), xEnd: .value("e", end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
                     .foregroundStyle(Color.black.opacity(0.28))
             }
+            // 潮止まりの帯（満干の前後 30 分、薄いグレー）。文字なし
+            ForEach(model.dayExtremes, id: \.at) { e in
+                RectangleMark(xStart: .value("s", e.at.addingTimeInterval(-30 * 60)), xEnd: .value("e", e.at.addingTimeInterval(30 * 60)), yStart: .value("y0", 0), yEnd: .value("y1", 100))
+                    .foregroundStyle(Color.white.opacity(0.07))
+            }
+            // 朝マズメ・夕マズメの帯（薄いオレンジ）。上端に名前
+            ForEach(twilightBands, id: \.start) { b in
+                RectangleMark(xStart: .value("s", b.start), xEnd: .value("e", b.end), yStart: .value("y0", 0), yEnd: .value("y1", 100))
+                    .foregroundStyle(DS.Color.accent.opacity(0.13))
+                PointMark(x: .value("時刻", b.start), y: .value("y", 100))
+                    .symbolSize(0)
+                    .annotation(position: .bottomTrailing, spacing: 0, overflowResolution: .init(x: .fit(to: .plot), y: .fit(to: .plot))) {
+                        Text(b.label).font(.system(size: 8, weight: .semibold)).foregroundStyle(DS.Color.accent)
+                    }
+            }
             ForEach(model.dayTide) { p in
                 AreaMark(x: .value("時刻", p.at), yStart: .value("底", 0), yEnd: .value("潮位", tideY(p.levelCm)), series: .value("系列", "潮位面"))
                     .foregroundStyle(LinearGradient(colors: [DS.Color.sea.opacity(0.35), DS.Color.sea.opacity(0.02)], startPoint: .top, endPoint: .bottom))
@@ -434,7 +449,11 @@ struct ForecastChart: View {
                     .foregroundStyle(cols[i].conditionCode == nil ? DS.Color.faded : DS.Color.textPrimary)
             }
             tableRow("気温") { i in Text(cols[i].airTemperatureC.map { "\(Int($0.rounded()))°" } ?? "—").font(DS.Font.number(10)).foregroundStyle(DS.Color.textPrimary) }
-            tableRow("雨") { i in Text(cols[i].precipitationMM.map { $0 < 0.05 ? "0" : String(format: "%.1f", $0) } ?? "—").font(DS.Font.number(10)).foregroundStyle((cols[i].precipitationMM ?? 0) > 0.5 ? DS.Color.sea : DS.Color.textSecondary) }
+            tableRow("降水") { i in
+                let chance = cols[i].precipitationChance
+                Text(chance.map { "\(Int(($0 * 100).rounded()))%" } ?? "—").font(DS.Font.number(10))
+                    .foregroundStyle((chance ?? 0) >= 0.5 ? DS.Color.sea : DS.Color.textSecondary)
+            }
             tableRow("風向") { i in
                 VStack(spacing: 0) {
                     Image(systemName: "location.north.fill").font(.system(size: 9, weight: .bold))
@@ -481,9 +500,21 @@ struct ForecastChart: View {
     private var sunMoonMarks: [SkyMark] {
         var out: [SkyMark] = []
         let r = model.dayStart...model.dayEnd
-        for d in [model.daySun?.sunrise, model.daySun?.sunset].compactMap({ $0 }) where r.contains(d) { out.append(SkyMark(at: d, y: 100, isSun: true)) }
-        for d in [model.dayMoon?.moonrise, model.dayMoon?.moonset].compactMap({ $0 }) where r.contains(d) { out.append(SkyMark(at: d, y: 91, isSun: false)) }
+        for d in [model.daySun?.sunrise, model.daySun?.sunset].compactMap({ $0 }) where r.contains(d) { out.append(SkyMark(at: d, y: 91, isSun: true)) }
+        for d in [model.dayMoon?.moonrise, model.dayMoon?.moonset].compactMap({ $0 }) where r.contains(d) { out.append(SkyMark(at: d, y: 83, isSun: false)) }
         return out
+    }
+
+    private struct TwilightBand { let start: Date; let end: Date; let label: String }
+
+    /// 朝マズメ（市民薄明の始まり〜日の出 30 分後）と夕マズメ（日の入 30 分前〜市民薄明の終わり）。チップと同じ定義
+    private var twilightBands: [TwilightBand] {
+        guard let sun = model.daySun else { return [] }
+        var out: [TwilightBand] = []
+        if let dawn = sun.civilDawn, let rise = sun.sunrise { out.append(TwilightBand(start: dawn, end: rise.addingTimeInterval(30 * 60), label: "朝マズメ")) }
+        if let set = sun.sunset, let dusk = sun.civilDusk { out.append(TwilightBand(start: set.addingTimeInterval(-30 * 60), end: dusk, label: "夕マズメ")) }
+        let r = model.dayStart...model.dayEnd
+        return out.filter { r.contains($0.start) || r.contains($0.end) }
     }
 
     /// 右軸の目盛り（潮位 cm の切りのよい値）

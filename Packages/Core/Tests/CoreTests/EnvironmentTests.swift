@@ -157,4 +157,15 @@ final class EnvironmentTests: XCTestCase {
         XCTAssertEqual(Series.interpolate(s, at: t0.addingTimeInterval(2 * 3600)), 20)
         XCTAssertNil(Series.interpolate(s, at: t0.addingTimeInterval(10 * 3600)))
     }
+
+    func testPrecipitationChanceFlowsIntoSnapshot() {
+        let t = Date(timeIntervalSince1970: 1_762_182_000)
+        var sample = WeatherSample(at: t, isForecast: true)
+        sample.precipitationChance = 0.4
+        let inputs = EnvSnapshotBuilder.Inputs(weather: [sample], marine: [], pressure: [])
+        let env = EnvSnapshotBuilder(tideStation: nil).build(at: t, coordinate: Coordinate(latitude: 41.77, longitude: 140.73), inputs: inputs)
+        XCTAssertEqual(env.precipitationChance ?? -1, 0.4, accuracy: 0.001)
+        let data = try! FogJSON.encode(env)
+        XCTAssertEqual(try! FogJSON.decode(EnvSnapshot.self, from: data).precipitationChance ?? -1, 0.4, accuracy: 0.001)
+    }
 }

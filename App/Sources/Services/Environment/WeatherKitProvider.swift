@@ -28,6 +28,7 @@ struct WeatherKitProvider: WeatherProviding {
             s.pressureHPa = h.pressure.converted(to: .hectopascals).value
             s.cloudCover = h.cloudCover
             s.precipitationMM = h.precipitationAmount.converted(to: .millimeters).value
+            s.precipitationChance = h.precipitationChance
             s.visibilityM = h.visibility.converted(to: .meters).value
             return s
         }

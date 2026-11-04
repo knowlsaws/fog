@@ -12,6 +12,8 @@ public struct WeatherSample: Codable, Hashable, Sendable {
     public var pressureHPa: Double?
     public var cloudCover: Double?
     public var precipitationMM: Double?
+    /// 降水確率 0〜1
+    public var precipitationChance: Double?
     public var visibilityM: Double?
     /// 実況（現在値・過去の観測ベース）なら false、予報なら true
     public var isForecast: Bool
