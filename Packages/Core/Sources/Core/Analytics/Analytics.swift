@@ -123,12 +123,10 @@ public enum Analytics {
     public static func speciesStats(catches: [Catch], timeZone: TimeZone = TimeZone(identifier: "Asia/Tokyo") ?? .current) -> [SpeciesStats] {
         Dictionary(grouping: catches, by: \.species).map { species, items in
             let sorted = items.sorted { $0.at < $1.at }
-            var bySpot: [UUID: Int] = [:]
             var hist: [Int: Int] = [:]
             var history: [(Date, Double)] = []
             var best = -Double.infinity
             for c in sorted {
-                if let spot = c.sessionID as UUID? { bySpot[spot, default: 0] += 0 } // placeholder: spot は session 経由で引く
                 if let l = c.lengthCm {
                     hist[Int((l / 5).rounded(.down)) * 5, default: 0] += 1
                     if l > best { best = l; history.append((c.at, l)) }

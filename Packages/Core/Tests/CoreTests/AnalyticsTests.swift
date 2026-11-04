@@ -101,7 +101,7 @@ final class AnalyticsL8Tests: XCTestCase {
     func testHourMonthAndRigStats() {
         let sessions = fixture()
         let cells = Analytics.hourMonthStats(catches: sessions.flatMap(\.catches), timeZone: jst)
-        XCTAssertEqual(cells.count, 3)   // 10月5時×2, 10月5時 — 同セル; 11月16時
+        XCTAssertEqual(cells.count, 2)   // 10月5時（3 尾）, 11月16時（1 尾）
         let oct5 = cells.first { $0.month == 10 && $0.hour == 5 }
         XCTAssertEqual(oct5?.catches, 3)
         XCTAssertEqual(oct5!.averageLengthCm!, (32.0 + 25 + 41) / 3, accuracy: 0.001)
