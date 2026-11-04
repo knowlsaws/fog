@@ -27,7 +27,7 @@ final class AnalyticsL8Tests: XCTestCase {
         var s1 = Session(id: UUID(uuidString: "B0000000-0000-4000-8000-000000000001")!, spotID: spotA, startedAt: s1Start, endedAt: s1Start.addingTimeInterval(3 * 3600))
         s1.snapshots = [env(at: s1Start, rate: 10), env(at: s1Start.addingTimeInterval(1800), rate: 9), env(at: s1Start.addingTimeInterval(3600), rate: 7, wind: 3)]
         s1.catches = [
-            Catch(id: UUID(uuidString: "C0000000-0000-4000-8000-000000000001")!, sessionID: s1.id, at: s1Start.addingTimeInterval(1200), coordinate: hakodate, species: "アイナメ", speciesConfidence: 0.9, lengthCm: 32, lengthErrorCm: 1.5, env: env(at: s1Start.addingTimeInterval(1200), rate: 10), rigID: nil),
+            Catch(id: UUID(uuidString: "C0000000-0000-4000-8000-000000000001")!, sessionID: s1.id, at: s1Start.addingTimeInterval(1200), coordinate: hakodate, species: "アイナメ", speciesConfidence: 0.9, lengthCm: 32, lengthErrorCm: 1.5, env: env(at: s1Start.addingTimeInterval(1200), rate: 10)),
             Catch(id: UUID(uuidString: "C0000000-0000-4000-8000-000000000002")!, sessionID: s1.id, at: s1Start.addingTimeInterval(2400), coordinate: Coordinate(latitude: 41.7822, longitude: 140.7193), species: "クロソイ", speciesConfidence: 0.8, lengthCm: 25, lengthErrorCm: 1.5, env: env(at: s1Start.addingTimeInterval(2400), rate: 9)),
         ]
         s1.hookEvents = [HookEvent(sessionID: s1.id, at: s1Start.addingTimeInterval(3000), coordinate: Coordinate(latitude: 41.7830, longitude: 140.7200), kind: .lost)]
