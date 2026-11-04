@@ -40,10 +40,15 @@ public struct SpeciesCorrectionTable: Codable, Hashable, Sendable {
             }
         }
         let maxConfirmed = Double(max(1, confirmed.values.max() ?? 1))
-        let ranked = scores.map { species, score -> SpeciesCandidate in
+        var ranked: [SpeciesCandidate] = []
+        for (species, score) in scores {
             let bonus = 0.02 * Double(confirmed[species] ?? 0) / maxConfirmed
-            return SpeciesCandidate(species: species, confidence: max(0, min(1, score + bonus)))
-        }.sorted { $0.confidence > $1.confidence || ($0.confidence == $1.confidence && $0.species < $1.species) }
+            ranked.append(SpeciesCandidate(species: species, confidence: max(0, min(1, score + bonus))))
+        }
+        ranked.sort { a, b in
+            if a.confidence != b.confidence { return a.confidence > b.confidence }
+            return a.species < b.species
+        }
         return Array(ranked.prefix(maxCount))
     }
 }
