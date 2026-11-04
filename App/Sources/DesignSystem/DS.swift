@@ -22,6 +22,10 @@ enum DS {
         /// 潮位の曲線（海の青）
         static let sea = SwiftUI.Color(red: 0.30, green: 0.62, blue: 0.95)
         static let moon = SwiftUI.Color(red: 0.56, green: 0.52, blue: 0.85)
+        /// 週行の土曜（日付と曜日の文字だけ）
+        static let saturday = SwiftUI.Color(red: 0.36, green: 0.64, blue: 1.0)             // #5CA3FF
+        /// 週行の日曜・祝日（日付と曜日の文字だけ）
+        static let holiday = SwiftUI.Color(red: 1.0, green: 0.36, blue: 0.36)              // #FF5C5C
         /// グラフのパネル・チップの枠なし面（#1C1C1E 相当）
         static let panel = SwiftUI.Color(red: 0.11, green: 0.11, blue: 0.12)
     }

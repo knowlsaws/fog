@@ -426,10 +426,11 @@ struct ForecastChart: View {
         .chartXScale(domain: model.dayStart...model.dayEnd)
         .chartYScale(domain: 0...100)
         .chartYAxis {
+            // 左軸：釣れ率（テーマ色の緑。右軸の潮位は海の青）
             AxisMarks(position: .leading, values: [0, 50, 100]) { value in
                 AxisGridLine().foregroundStyle(DS.Color.faded.opacity(0.5))
                 AxisValueLabel {
-                    if let v = value.as(Int.self) { Text("\(v)").font(DS.Font.number(9)).foregroundStyle(DS.Color.textTertiary) }
+                    if let v = value.as(Int.self) { Text("\(v)").font(DS.Font.number(9)).foregroundStyle(DS.Color.accent) }
                 }
             }
             // 右軸：潮位 cm（釣れ率の目盛りに写した位置に、元の cm を書く）
@@ -565,24 +566,35 @@ struct ForecastChart: View {
         return ticks
     }
 
-    /// 週間の見通し：曜日・昼の天気・最高釣れ率。選択中はオレンジ。タップでその日へ
+    /// 週間の見通し：月〜日の固定並びで、日付(曜)・昼の天気・最高釣れ率。選択中はテーマ色の背景。タップでその日へ。
+    /// 日付(曜)だけ色を付ける：土曜は青、日曜と祝日は赤。範囲外の日は日付だけ薄く出す
     private var weekRow: some View {
         HStack(spacing: 4) {
             ForEach(model.weekOutlook) { d in
                 let selected = d.offset == model.dayOffset
                 Button { withAnimation(.easeInOut(duration: 0.2)) { model.dayOffset = d.offset } } label: {
                     VStack(spacing: 1) {
-                        Text(Self.shortDay(d.dayStart, timeZone: model.timeZone)).font(.system(size: 9, weight: .semibold)).foregroundStyle(selected ? DS.Color.background : DS.Color.textTertiary)
+                        Text(Self.shortDay(d.dayStart, timeZone: model.timeZone)).font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Self.dayColor(d, selected: selected))
                         Image(systemName: d.conditionCode.map { HomeViewModel.weatherSymbol($0) } ?? "minus")
-                            .font(.system(size: 11)).foregroundStyle(selected ? DS.Color.background : DS.Color.textSecondary)
-                        Text("\(d.maxScore)").font(DS.Font.number(14)).foregroundStyle(selected ? DS.Color.background : DS.Color.textPrimary)
+                            .font(.system(size: 11)).foregroundStyle(selected ? DS.Color.background : (d.available ? DS.Color.textSecondary : DS.Color.faded))
+                        Text(d.maxScore.map { "\($0)" } ?? "–").font(DS.Font.number(14)).foregroundStyle(selected ? DS.Color.background : (d.available ? DS.Color.textPrimary : DS.Color.faded))
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(selected ? DS.Color.accent : DS.Color.surfaceRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .disabled(!d.available)
             }
         }
+    }
+
+    /// 週行の日付(曜)の色。日曜・祝日は赤、土曜は青、平日は薄い白。選択中の平日は背景色（テーマ色の上に乗る）
+    static func dayColor(_ d: HomeViewModel.DayOutlook, selected: Bool) -> SwiftUI.Color {
+        if d.weekday == 1 || d.isHoliday { return DS.Color.holiday }
+        if d.weekday == 7 { return DS.Color.saturday }
+        if !d.available { return DS.Color.faded }
+        return selected ? DS.Color.background : DS.Color.textTertiary
     }
 
     /// 「04(水)」
