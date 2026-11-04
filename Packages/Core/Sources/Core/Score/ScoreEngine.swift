@@ -69,6 +69,12 @@ public struct ScoreEngine: Sendable {
         self.personal = personal
     }
 
+    /// 小数 1 桁の文字列（`String(format:)` は Linux で遅いので使わない）
+    static func tenth(_ x: Double) -> String {
+        let v = (x * 10).rounded() / 10
+        return v == v.rounded() ? "\(Int(v)).0" : "\(v)"
+    }
+
     public func score(_ input: ScoreInput) -> ScoreResult {
         var parts: [ScoreBreakdown] = []
         var total = 50.0
@@ -109,28 +115,28 @@ public struct ScoreEngine: Sendable {
         // 気圧傾向：下がり始めは活性が上がる、急上昇は渋い
         if let trend = env.pressureTrend3hHPa {
             let p: Double = trend <= -1.5 ? 4 : (trend >= 2 ? -3 : 0)
-            parts.append(.init(factor: .pressure, points: p, detail: String(format: "%+.1f hPa/3h", trend)))
+            parts.append(.init(factor: .pressure, points: p, detail: "\(trend >= 0 ? "+" : "")\(Self.tenth(trend)) hPa/3h"))
             total += p
         }
 
         // 風：8 m/s 超は悪い（UI の判定と同じ）
         if let w = env.windSpeedMS {
             let p: Double = w <= 3 ? 4 : (w <= 5 ? 0 : (w <= 8 ? -8 : -20))
-            parts.append(.init(factor: .wind, points: p, detail: String(format: "%.0f m/s", w)))
+            parts.append(.init(factor: .wind, points: p, detail: "\(Int(w.rounded())) m/s"))
             total += p
         }
 
         // 波
         if let h = env.waveHeightM {
             let p: Double = h <= 0.5 ? 3 : (h <= 1.0 ? 0 : (h <= 1.5 ? -8 : -20))
-            parts.append(.init(factor: .wave, points: p, detail: String(format: "波 %.1f m", h)))
+            parts.append(.init(factor: .wave, points: p, detail: "波 \(Self.tenth(h)) m"))
             total += p
         }
 
         // 水温・季節（北海道の根魚：8〜18℃ が適水温）
         if let sst = env.seaSurfaceTempC {
             let p: Double = (8...18).contains(sst) ? 6 : ((5..<8).contains(sst) || (18...22).contains(sst) ? 0 : -8)
-            parts.append(.init(factor: .water, points: p, detail: String(format: "水温 %.1f℃", sst)))
+            parts.append(.init(factor: .water, points: p, detail: "水温 \(Self.tenth(sst))℃"))
             total += p
         } else {
             let month = buckets.month
@@ -142,7 +148,7 @@ public struct ScoreEngine: Sendable {
         // 月相（補助）
         if let age = env.moonAge {
             let p: Double = (age < 2 || age > 27.5 || (13.5...16).contains(age)) ? 2 : 0
-            parts.append(.init(factor: .moon, points: p, detail: String(format: "月齢 %.0f", age)))
+            parts.append(.init(factor: .moon, points: p, detail: "月齢 \(Int(age.rounded()))"))
             total += p
         }
 

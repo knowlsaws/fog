@@ -112,7 +112,7 @@ public struct PersonalModel: Hashable, Sendable {
         if let n = buckets.tideName { sum += term(model.byTideName[n]) }
         sum += term(model.byMonth[buckets.month])
         let points = (max(-20, min(20, sum)) * model.weight).rounded()
-        let detail = String(format: "実績 %.0f 時間・%d 尾", model.total.hours, model.total.catches)
+        let detail = "実績 \(Int(model.total.hours.rounded())) 時間・\(model.total.catches) 尾"
         return (points, detail)
     }
 }
