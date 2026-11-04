@@ -2,7 +2,7 @@ import XCTest
 @testable import Core
 
 final class WidgetSnapshotTests: XCTestCase {
-    private let base = Date(timeIntervalSince1970: 1_762_210_800) // 2025-11-04 00:00 JST
+    private let base = Date(timeIntervalSince1970: 1_762_182_000) // 2025-11-04 00:00 JST（= 11-03 15:00 UTC）
 
     private func snapshot() -> WidgetSnapshot {
         var points: [WidgetSnapshot.Point] = []
