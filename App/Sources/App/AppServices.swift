@@ -15,6 +15,7 @@ final class AppServices {
     let detection: SessionDetectionService
     let capture: CaptureService
     let photoImport: PhotoImportService
+    let report: ReportService
 
     init() {
         let persistence = PersistenceController.live()
@@ -32,8 +33,15 @@ final class AppServices {
         let capture = CaptureService(store: store, environment: environment, detection: detection)
         self.capture = capture
         self.photoImport = PhotoImportService(store: store, capture: capture)
+        let report = ReportService(store: store)
+        self.report = report
         detection.onSessionEnded = { [photoImport] id in
-            Task { @MainActor in await photoImport.importPhotos(for: id) }
+            Task { @MainActor in
+                await photoImport.importPhotos(for: id)
+                if let s = await report.attachReport(to: id) {
+                    SessionNotifications.sessionEnded(spotName: (try? store.spot(id: s.spotID))?.name ?? "釣り場", catches: s.catches.count, summary: s.report?.summary, sessionID: id)
+                }
+            }
         }
     }
 
