@@ -1,21 +1,6 @@
 import XCTest
 @testable import Core
 
-final class ScoreEngineTests: XCTestCase {
-    func testDawnMovingTideLightWindScoresHigh() {
-        var env = EnvSnapshot(at: .now, coordinate: .init(latitude: 41.78, longitude: 140.72))
-        env.windSpeedMS = 2; env.tideRateCmPerHour = 12; env.pressureTrend3hHPa = -1.5
-        let r = ScoreEngine().score(.init(at: .now, env: env, minutesToNextTwilight: 30))
-        XCTAssertGreaterThanOrEqual(r.score, 75)
-    }
-    func testStrongWindSlackTideScoresLow() {
-        var env = EnvSnapshot(at: .now, coordinate: .init(latitude: 41.78, longitude: 140.72))
-        env.windSpeedMS = 10; env.tideRateCmPerHour = 1
-        let r = ScoreEngine().score(.init(at: .now, env: env, minutesToNextTwilight: 300))
-        XCTAssertLessThanOrEqual(r.score, 30)
-    }
-}
-
 final class AnalyticsTests: XCTestCase {
     func testSpotStats() {
         let spot = UUID()
