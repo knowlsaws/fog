@@ -129,6 +129,7 @@ final class SessionDetectionService {
         }
         activeSessionID = session.id
         activeSpotName = spot.name
+        WidgetSync.setRecording(true)
         location.startTracking()
         scheduler.start(session: session, coordinate: anchor)
         SessionNotifications.sessionStarted(spotName: spot.name, sessionID: session.id)
@@ -145,6 +146,7 @@ final class SessionDetectionService {
         try? store.upsert(session)
         activeSessionID = session.id
         location.startTracking()
+        WidgetSync.setRecording(true)
         scheduler.start(session: session, coordinate: anchor)
         Self.log.info("session resumed (run and gun)")
     }
@@ -160,6 +162,7 @@ final class SessionDetectionService {
         location.startMonitoring()
         lastEndedSessionID = id
         activeSessionID = nil
+        WidgetSync.setRecording(false)
         let spotName = (try? store.spot(id: session.spotID))?.name ?? "釣り場"
         SessionNotifications.sessionEnded(spotName: spotName, catches: session.catches.count, summary: session.report?.summary, sessionID: id)
         Self.log.info("session ended with \(session.catches.count) catches")
@@ -191,6 +194,7 @@ final class SessionDetectionService {
             location.startMonitoring()
             activeSessionID = nil
             detector.reset()
+            WidgetSync.setRecording(false)
         }
         try? store.deleteSession(id: sessionID)
     }

@@ -110,6 +110,7 @@ final class DataManager {
         for key in ["fog.didSeedSampleSession", "fog.importedPhotoIdentifiers", "fog.speciesCorrections", "fog.currentTackle", "fog.currentRig", "fog.homeSpotID"] {
             UserDefaults.standard.removeObject(forKey: key)
         }
+        FogShared.currentTackle = nil
         if let url = EnvironmentService.defaultStoreURL() { try? FileManager.default.removeItem(at: url) }
         try store.mergeSpecies(Species.initialCatalog)
     }

@@ -29,6 +29,7 @@ targets:
     platform: iOS
     sources:
       - path: App/Sources
+      - path: App/Shared
       - path: App/Resources
     dependencies:
       - package: Core
@@ -78,14 +79,17 @@ targets:
     platform: iOS
     sources:
       - path: App/Widgets
+      - path: App/Shared
     dependencies:
       - package: Core
       - sdk: WidgetKit.framework
       - sdk: SwiftUI.framework
+      - sdk: AppIntents.framework
     info:
       path: App/Widgets/Info.plist
       properties:
         CFBundleDisplayName: Fog
+        FogAppGroupIdentifier: group.${BUNDLE_ID_PREFIX}.fog
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

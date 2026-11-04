@@ -114,6 +114,11 @@ final class HomeViewModel {
         sunTimesByDay = stride(from: 0, through: end.timeIntervalSince(start), by: 86_400).map { SunCalculator.times(on: start.addingTimeInterval($0), at: coordinate, timeZone: timeZone) }
         let wind = inputs.weather.compactMap { s in s.windSpeedMS.map { (s.at, $0) } }
         events = ScoreEvents.upcoming(from: now, count: 3, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
+
+        // ウィジェット（15 分更新）とピーク通知（§8）
+        let widgetEvents = ScoreEvents.upcoming(from: now, count: 16, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
+        WidgetSync.publish(spotName: spot?.name ?? "", timeline: timeline, tide: tide, events: widgetEvents, isRecording: isRecording, tackle: services.capture.currentTackle)
+        PeakNotifier.schedule(points: timeline, spot: spot, now: now, timeZone: timeZone)
     }
 
     func select(spot: Spot) {

@@ -55,13 +55,22 @@ final class AppServices {
         SampleSeeder.seedIfNeeded(store: store)
         await SessionNotifications.requestAuthorization()
         detection.start()
+        drainPendingHookEvents()
         _ = await PhotoLibraryService.requestAuthorization()
     }
 
-    /// フォアグラウンド復帰：釣行中なら標準カメラの写真を取り込む（F-08）。
+    /// フォアグラウンド復帰：ウィジェットからの針ロストを取り込み、釣行中なら標準カメラの写真を取り込む（F-08）。
     func didBecomeActive() async {
+        drainPendingHookEvents()
         if let active = try? store.activeSession() {
             await photoImport.importPhotos(for: active.id)
+        }
+    }
+
+    /// ウィジェットの「針ロスト」はアプリを開かずに時刻だけ記録される。ここで釣行・位置を補って保存する（F-15）。
+    func drainPendingHookEvents() {
+        for date in FogShared.takePendingHookLost() {
+            hookRecorder.record(.lost, at: date)
         }
     }
 }

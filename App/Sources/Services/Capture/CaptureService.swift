@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import UIKit
 import Core
 import os
 
@@ -22,9 +23,10 @@ final class CaptureService {
     private static let log = Logger(subsystem: "fog", category: "capture")
 
     /// 撮影画面の例外的入力（タックル・リグ）。次回へ引き継ぐ（F-14）
+    /// App Group に置き、ウィジェットのタックル切替と同じ値を見る（F-14）。
     var currentTackle: TackleKind? {
-        get { TackleKind(rawValue: UserDefaults.standard.string(forKey: "fog.currentTackle") ?? "") }
-        set { UserDefaults.standard.set(newValue?.rawValue, forKey: "fog.currentTackle") }
+        get { FogShared.currentTackle }
+        set { FogShared.currentTackle = newValue; WidgetSync.setTackle(newValue) }
     }
     var currentRigID: UUID? {
         get { UserDefaults.standard.string(forKey: "fog.currentRig").flatMap(UUID.init(uuidString:)) }
@@ -94,6 +96,10 @@ final class CaptureService {
             return nil
         }
         let record = merged ? nil : judge(saved, spotID: current.spotID)
+        // 記録更新の通知はアプリを閉じているときだけ（撮影直後はシートで見せる。§8）
+        if let record, record.hasAny, UIApplication.shared.applicationState != .active {
+            SessionNotifications.record(species: saved.species, lengthCm: saved.lengthCm, judgement: record)
+        }
         return Outcome(catchRecord: saved, merged: merged, record: record)
     }
 
