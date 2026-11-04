@@ -13,6 +13,8 @@ final class AppServices {
     let location: LocationService
     let scheduler: SnapshotScheduler
     let detection: SessionDetectionService
+    let capture: CaptureService
+    let photoImport: PhotoImportService
 
     init() {
         let persistence = PersistenceController.live()
@@ -25,7 +27,14 @@ final class AppServices {
         self.environment = environment
         self.location = location
         self.scheduler = scheduler
-        self.detection = SessionDetectionService(location: location, store: store, scheduler: scheduler, environment: environment)
+        let detection = SessionDetectionService(location: location, store: store, scheduler: scheduler, environment: environment)
+        self.detection = detection
+        let capture = CaptureService(store: store, environment: environment, detection: detection)
+        self.capture = capture
+        self.photoImport = PhotoImportService(store: store, capture: capture)
+        detection.onSessionEnded = { [photoImport] id in
+            Task { @MainActor in await photoImport.importPhotos(for: id) }
+        }
     }
 
     /// 起動時：ダミーデータ、通知、自動検出。
@@ -33,6 +42,14 @@ final class AppServices {
         SampleSeeder.seedIfNeeded(store: store)
         await SessionNotifications.requestAuthorization()
         detection.start()
+        _ = await PhotoLibraryService.requestAuthorization()
+    }
+
+    /// フォアグラウンド復帰：釣行中なら標準カメラの写真を取り込む（F-08）。
+    func didBecomeActive() async {
+        if let active = try? store.activeSession() {
+            await photoImport.importPhotos(for: active.id)
+        }
     }
 }
 
