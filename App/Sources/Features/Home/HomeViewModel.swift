@@ -75,11 +75,14 @@ final class HomeViewModel {
         isRecording = active != nil
 
         // 釣り場：記録中の釣行 → 選択中 → 現在地に最も近い登録釣り場 → 直近の釣行の釣り場
-        let spots = (try? store.spots()) ?? []
+        // 位置が無い（0, 0）釣り場はホームの対象にしない
+        let spots = ((try? store.spots()) ?? []).filter { $0.coordinate.isPlausible }
         let selectedID = UserDefaults.standard.string(forKey: "fog.homeSpotID").flatMap(UUID.init(uuidString:))
         let location = services.location.lastFix?.coordinate
         if let active, let s = spots.first(where: { $0.id == active.spotID }) {
             spot = s
+        } else if active != nil {
+            spot = nil
         } else if let selectedID, let s = spots.first(where: { $0.id == selectedID }) {
             spot = s
         } else if let location, let nearest = spots.filter(\.isRegistered).min(by: { Geo.distanceMeters($0.coordinate, location) < Geo.distanceMeters($1.coordinate, location) }) {
@@ -87,7 +90,8 @@ final class HomeViewModel {
         } else if let last = sessions.first, let s = spots.first(where: { $0.id == last.spotID }) {
             spot = s
         }
-        coordinate = active?.track.last?.coordinate ?? spot?.coordinate ?? location ?? SampleData.hakodate
+        let candidate = active?.track.last?.coordinate ?? spot?.coordinate ?? location ?? SampleData.hakodate
+        coordinate = candidate.isPlausible ? candidate : (location ?? SampleData.hakodate)
 
         // 自分データの重み（削除が即時反映されるよう revision で捨てる）
         let personal = cache.value("personalModel", store: store) {

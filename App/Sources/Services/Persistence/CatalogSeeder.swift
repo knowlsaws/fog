@@ -17,6 +17,22 @@ enum CatalogSeeder {
             log.error("species catalog seed failed: \(error.localizedDescription, privacy: .public)")
         }
         removeLegacySampleIfNeeded(store: store)
+        demoteZeroCoordinateSpots(store: store)
+    }
+
+    /// 位置なしで撮影したときに (0, 0) で作られてしまった釣り場を「位置不明・未登録」にする（ホームがギニア湾の天気を出さないように）。
+    @MainActor
+    private static func demoteZeroCoordinateSpots(store: FogStore) {
+        guard let spots = try? store.spots() else { return }
+        for var spot in spots where !spot.coordinate.isPlausible && (spot.isRegistered || spot.name == "釣り場") {
+            spot.isRegistered = false
+            if spot.name == "釣り場" { spot.name = "位置不明" }
+            try? store.upsert(spot)
+            if UserDefaults.standard.string(forKey: "fog.homeSpotID") == spot.id.uuidString {
+                UserDefaults.standard.removeObject(forKey: "fog.homeSpotID")
+            }
+            log.notice("demoted zero-coordinate spot \(spot.id.uuidString, privacy: .public)")
+        }
     }
 
     @MainActor

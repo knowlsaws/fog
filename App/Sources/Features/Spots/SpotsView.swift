@@ -32,7 +32,7 @@ struct SpotsView: View {
         }
         .onAppear {
             model.attach(services)
-            if let first = model.cards.first {
+            if let first = model.cards.first(where: { $0.spot.coordinate.isPlausible }) {
                 selectedID = first.spot.id
                 camera = .region(region(for: first.spot.coordinate))
             } else if let c = model.currentLocation {
@@ -43,7 +43,7 @@ struct SpotsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in model.refresh() }
         .onChange(of: selectedID) { _, id in
-            if let id, let c = model.allCards.first(where: { $0.spot.id == id }) { withAnimation { camera = .region(region(for: c.spot.coordinate)) } }
+            if let id, let c = model.allCards.first(where: { $0.spot.id == id }), c.spot.coordinate.isPlausible { withAnimation { camera = .region(region(for: c.spot.coordinate)) } }
         }
         .sheet(item: $detail) { SpotDetailView(card: $0).onDisappear { model.refresh() } }
         .sheet(isPresented: $showSearch) { SpotSearchSheet { item in
@@ -62,7 +62,7 @@ struct SpotsView: View {
 
     private var map: some View {
         Map(position: $camera, interactionModes: [.pan, .zoom]) {
-            ForEach(model.allCards) { card in
+            ForEach(model.allCards.filter { $0.spot.coordinate.isPlausible }) { card in
                 Annotation("", coordinate: card.spot.coordinate.cl, anchor: .center) {
                     Button { selectedID = card.spot.id } label: {
                         SpotMarker(card: card, selected: selectedID == card.spot.id, zoomedIn: zoomedIn)
@@ -168,7 +168,7 @@ struct SpotCardView: View {
                     if let last = card.stats.lastSessionAt {
                         Text(last, format: .dateTime.year().month().day()).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
                     } else {
-                        Text(card.isCandidate ? "地図から見つけた漁港" : "\(card.stats.sessions)釣行").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                        Text(card.isCandidate ? "地図から見つけた漁港" : (card.spot.coordinate.isPlausible ? "\(card.stats.sessions)釣行" : "位置なしで撮影した釣果。詳細から削除できます")).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(2)
                     }
                 }
                 Spacer()

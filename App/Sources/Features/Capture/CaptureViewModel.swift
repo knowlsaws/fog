@@ -11,6 +11,7 @@ final class CaptureViewModel {
     private let segmenter = FishSegmenter()
     private var capture: CaptureService?
     private var store: FogStore?
+    private var location: LocationService?
 
     private(set) var status: FrameStatus = .searching
     private(set) var liveLengthCm: Double?
@@ -29,6 +30,9 @@ final class CaptureViewModel {
 
     func attach(services: AppServices) {
         store = services.store
+        location = services.location
+        // 撮影位置を付けるため、画面を開いたら位置を取り始める（釣行の記録中でなくても）
+        if (try? services.store.activeSession()) == nil { services.location.probe() }
         if capture == nil { capture = services.capture }
         tackle = services.capture.currentTackle ?? ((try? services.store.sessions())?.first?.tackle) ?? .spinning
         rigs = (try? services.store.rigs()) ?? []
@@ -84,9 +88,11 @@ final class CaptureViewModel {
         lastResultAt = .now
     }
 
+    /// 撮影位置：記録中の釣行の最後の立ち位置 → 端末の最新の位置（撮影画面を開いたときに取り始める）
     private func depthCoordinate() -> Coordinate? {
-        guard let store, let active = try? store.activeSession() else { return nil }
-        return active.track.last?.coordinate
+        if let store, let active = try? store.activeSession(), let c = active.track.last?.coordinate, c.isPlausible { return c }
+        if let c = location?.lastFix?.coordinate, c.isPlausible { return c }
+        return nil
     }
 
     func dismissResult() { result = nil }
