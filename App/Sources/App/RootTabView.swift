@@ -42,22 +42,26 @@ struct RootTabView: View {
 
     private var tabBar: some View {
         HStack(spacing: 0) {
-            tabButton(.home, system: "house.fill")
-            tabButton(.log, system: "list.bullet.rectangle")
+            tabButton(.home, system: "house")
+            tabButton(.log, system: "doc.text")
             captureButton
-            tabButton(.guide, system: "book.closed.fill")
-            tabButton(.spots, system: "map.fill")
+            tabButton(.guide, system: "book")
+            tabButton(.spots, system: "map")
         }
         .padding(.horizontal, DS.Spacing.l)
-        .padding(.top, DS.Spacing.s)
+        .padding(.top, DS.Spacing.m)
         .padding(.bottom, DS.Spacing.m)
-        .background(DS.Color.surface.opacity(0.92).ignoresSafeArea(edges: .bottom))
+        .background(
+            DS.Color.surface
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 28, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 28, style: .continuous))
+                .ignoresSafeArea(edges: .bottom)
+        )
     }
 
     private func tabButton(_ tab: Tab, system: String) -> some View {
         Button { selected = tab } label: {
-            Image(systemName: system)
-                .font(.system(size: 22, weight: .semibold))
+            Image(systemName: selected == tab ? system + ".fill" : system)
+                .font(.system(size: 22, weight: .regular))
                 .foregroundStyle(selected == tab ? DS.Color.textPrimary : DS.Color.textTertiary)
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
@@ -68,7 +72,7 @@ struct RootTabView: View {
         Button { selected = .capture } label: {
             ZStack {
                 Circle().fill(DS.Color.accent).frame(width: 64, height: 64)
-                    .shadow(color: DS.Color.accent.opacity(0.45), radius: 12)
+                    .shadow(color: DS.Color.accent.opacity(0.55), radius: 14)
                 Image(systemName: "camera.fill")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(.white)

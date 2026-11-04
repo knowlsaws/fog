@@ -46,6 +46,7 @@ final class HomeViewModel {
 
     private var services: AppServices?
     private let cache = AnalysisCache()
+    private var timelineKey = ""
     let timeZone = TimeZone(identifier: "Asia/Tokyo") ?? .current
 
     func attach(_ services: AppServices) {
@@ -93,29 +94,37 @@ final class HomeViewModel {
             (species: name, score: engine.score(ScoreInput(at: now, coordinate: coordinate, env: current, species: name, timeZone: timeZone)).score)
         }
 
-        chips = makeChips(current)
+        chips = makeChips(current, fetchFailed: env.lastError != nil)
 
-        // 推移：今日の 0 時から予報のある範囲（最低 48 時間）まで 15 分刻み。潮は無期限なので潮位曲線は同じ範囲
+        // 推移：前日の 0 時から、予報のある範囲か 10 日先の遠い方まで 15 分刻み（潮・天文は無期限に計算できる）。
+        // 計算が重いので、場所・予報・保存データ・日付が変わったときだけ作り直す（30 秒ごとの更新では「今」の線だけ動く）
         var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
-        let start = cal.startOfDay(for: now)
+        let start = cal.startOfDay(for: now).addingTimeInterval(-86_400)
         forecastHorizon = env.forecastHorizon(for: coordinate)
-        let end = max(forecastHorizon ?? start, start.addingTimeInterval(48 * 3600))
-        rangeStart = start; rangeEnd = end
+        let end = max(forecastHorizon ?? start, start.addingTimeInterval(11 * 86_400))
+        let entry = env.cache.entry(for: coordinate)
+        let key = [String(format: "%.4f,%.4f", coordinate.latitude, coordinate.longitude), "\(entry?.weatherFetchedAt?.timeIntervalSince1970 ?? 0)",
+                   "\(entry?.marineFetchedAt?.timeIntervalSince1970 ?? 0)", "\(store.revision)", "\(start.timeIntervalSince1970)", "\(end.timeIntervalSince1970)"].joined(separator: "|")
         let station = env.tideStation(near: coordinate)
         let tide = station.map { TideEngine(station: $0) }
-        tideExtremes = tide?.extremes(from: start, to: end) ?? []
         let inputs = env.inputs(for: coordinate)
-        let builder = env.builder(for: coordinate)
-        timeline = ScoreTimeline.compute(engine: engine, coordinate: coordinate, from: start, to: end, stepMinutes: 15, timeZone: timeZone) { t in
-            var e = builder.build(at: t, coordinate: coordinate, inputs: inputs, tide: tide, extremes: tideExtremes)
-            if let h = forecastHorizon, t > h { e.isForecast = true }
-            return e
+        if key != timelineKey {
+            timelineKey = key
+            rangeStart = start; rangeEnd = end
+            tideExtremes = tide?.extremes(from: start, to: end) ?? []
+            let builder = env.builder(for: coordinate)
+            let horizon = forecastHorizon
+            timeline = ScoreTimeline.compute(engine: engine, coordinate: coordinate, from: start, to: end, stepMinutes: 15, timeZone: timeZone) { t in
+                var e = builder.build(at: t, coordinate: coordinate, inputs: inputs, tide: tide, extremes: tideExtremes)
+                if let h = horizon, t > h { e.isForecast = true }
+                return e
+            }
+            tideCurve = stride(from: 0, through: end.timeIntervalSince(start), by: 600).compactMap { offset in
+                let t = start.addingTimeInterval(offset)
+                return tide.map { TidePoint(at: t, levelCm: $0.level(at: t)) }
+            }
+            sunTimesByDay = stride(from: 0, through: end.timeIntervalSince(start), by: 86_400).map { SunCalculator.times(on: start.addingTimeInterval($0), at: coordinate, timeZone: timeZone) }
         }
-        tideCurve = stride(from: 0, through: end.timeIntervalSince(start), by: 600).compactMap { offset in
-            let t = start.addingTimeInterval(offset)
-            return tide.map { TidePoint(at: t, levelCm: $0.level(at: t)) }
-        }
-        sunTimesByDay = stride(from: 0, through: end.timeIntervalSince(start), by: 86_400).map { SunCalculator.times(on: start.addingTimeInterval($0), at: coordinate, timeZone: timeZone) }
         let wind = inputs.weather.compactMap { s in s.windSpeedMS.map { (s.at, $0) } }
         events = ScoreEvents.upcoming(from: now, count: 3, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
 
@@ -123,6 +132,13 @@ final class HomeViewModel {
         let widgetEvents = ScoreEvents.upcoming(from: now, count: 16, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
         WidgetSync.publish(spotName: spot?.name ?? "", timeline: timeline, tide: tide, events: widgetEvents, isRecording: isRecording, tackle: services.capture.currentTackle)
         PeakNotifier.schedule(points: timeline, spot: spot, now: now, timeZone: timeZone)
+    }
+
+    /// チップ詳細の「再取得」：1 時間の間隔制限を無視して気象・海況を取りに行く。
+    func forceRefreshEnvironment() async {
+        guard let services else { return }
+        await services.environment.refreshIfNeeded(at: coordinate, now: .now, force: true)
+        await refresh()
     }
 
     func select(spot: Spot) {
@@ -133,7 +149,7 @@ final class HomeViewModel {
     var availableSpots: [Spot] { ((try? services?.store.spots()) ?? []).filter(\.isRegistered) }
 
     /// 4 チップ：値は「次の出来事の時刻」か「今の数値」。残り時間は出さない（時刻と紛らわしいため）。
-    private func makeChips(_ env: EnvSnapshot) -> [Chip] {
+    private func makeChips(_ env: EnvSnapshot, fetchFailed: Bool) -> [Chip] {
         var out: [Chip] = []
         // 潮：矢印（上げ／下げ／止まり）、次の満干の時刻、潮名
         let rate = env.tideRateCmPerHour ?? 0
@@ -162,12 +178,12 @@ final class HomeViewModel {
             out.append(Chip(kind: .wind, symbol: "location.north.fill", value: "\(Int(w.rounded())) m/s",
                             label: env.windDirectionDeg.map { Self.compass($0) + "の風" } ?? "風", tone: w > 8 ? .bad : (w <= 3 ? .good : .normal)))
         } else {
-            out.append(Chip(kind: .wind, symbol: "wind", value: "—", label: "風 取得中", tone: .normal))
+            out.append(Chip(kind: .wind, symbol: "wind", value: "—", label: fetchFailed ? "風 取得できず" : "風 取得中", tone: .normal))
         }
         // 天気：気温と天気の名前
         let temp = env.airTemperatureC.map { "\(Int($0.rounded()))°" } ?? "—"
         out.append(Chip(kind: .weather, symbol: Self.weatherSymbol(env.conditionCode), value: temp,
-                        label: env.airTemperatureC == nil ? "天気 取得中" : Self.weatherName(env.conditionCode, precipitation: env.precipitationMM),
+                        label: env.airTemperatureC == nil ? (fetchFailed ? "天気 取得できず" : "天気 取得中") : Self.weatherName(env.conditionCode, precipitation: env.precipitationMM),
                         tone: (env.precipitationMM ?? 0) > 1 ? .bad : .normal))
         return out
     }

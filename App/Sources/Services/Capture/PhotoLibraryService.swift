@@ -61,6 +61,17 @@ struct PhotoLibraryService {
     }
 
     /// サムネイル JPEG（長辺 320）。
+    /// 釣果の写真をフォトライブラリから削除する（iOS が確認ダイアログを出す）。
+    static func delete(identifiers: [String]) async {
+        let ids = Array(Set(identifiers)).filter { !$0.isEmpty }
+        guard !ids.isEmpty else { return }
+        let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+        guard assets.count > 0 else { return }
+        try? await PHPhotoLibrary.shared().performChanges {
+            PHAssetChangeRequest.deleteAssets(assets)
+        }
+    }
+
     static func thumbnailJPEG(from cgImage: CGImage, maxPixel: CGFloat = 320) -> Data? {
         let image = UIImage(cgImage: cgImage)
         let scale = min(1, maxPixel / max(image.size.width, image.size.height))

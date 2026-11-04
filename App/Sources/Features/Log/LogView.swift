@@ -16,10 +16,13 @@ struct LogView: View {
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: DS.Spacing.s) {
-                header.frame(height: geo.size.height * 0.07)
-                latestReport.frame(height: geo.size.height * 0.08)
-                sessionCards.frame(height: geo.size.height * 0.33)
-                analysisCards.frame(height: geo.size.height * 0.32)
+                header.frame(height: geo.size.height * 0.08)
+                periodControl.frame(height: geo.size.height * 0.055)
+                latestReport.frame(height: geo.size.height * 0.065)
+                sessionCards.frame(height: geo.size.height * 0.32)
+                Text("分析").font(.system(size: 22, weight: .bold)).foregroundStyle(DS.Color.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading).frame(height: geo.size.height * 0.045)
+                analysisCards.frame(height: geo.size.height * 0.29)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, DS.Spacing.l)
@@ -43,39 +46,56 @@ struct LogView: View {
         }
     }
 
+    /// 見出し「ログ」と右の数字 2 つ（確定画像：数字の下に小さなラベル）
     private var header: some View {
-        HStack {
-            Picker("期間", selection: $model.period) {
-                ForEach(LogViewModel.Period.allCases) { p in Text(p.rawValue).tag(p) }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 220)
+        HStack(alignment: .bottom) {
+            Text("ログ").font(.system(size: 34, weight: .bold)).foregroundStyle(DS.Color.textPrimary)
             Spacer()
-            HStack(spacing: DS.Spacing.xs) {
-                Text("\(model.sessionCount)").font(DS.Font.number(18)).foregroundStyle(DS.Color.textPrimary)
-                Text("釣行").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-                Text("\(model.catchCount)").font(DS.Font.number(18)).foregroundStyle(DS.Color.textPrimary)
-                Text("尾").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            HStack(spacing: DS.Spacing.l) {
+                stat(model.sessionCount, "釣行")
+                stat(model.catchCount, "尾")
             }
+            .padding(.bottom, 6)
         }
     }
 
+    private func stat(_ value: Int, _ label: String) -> some View {
+        VStack(spacing: 0) {
+            Text("\(value)").font(DS.Font.number(18)).foregroundStyle(DS.Color.textPrimary)
+            Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+        }
+    }
+
+    /// 期間セグメント：選択中はオレンジ地に黒文字、他は暗い面に白文字（確定画像）
+    private var periodControl: some View {
+        HStack(spacing: 0) {
+            ForEach(LogViewModel.Period.allCases) { p in
+                Button { model.period = p } label: {
+                    Text(p.rawValue)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(model.period == p ? DS.Color.background : DS.Color.textPrimary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(model.period == p ? DS.Color.accent : Color.clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    /// 最新レポートの 1 行（確定画像：グレーの文章。枠なし）
     private var latestReport: some View {
         Group {
             if let r = model.latestReport {
                 Button { reportSession = r.session } label: {
-                    HStack {
-                        Text(r.summary).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
-                        Spacer()
-                        Image(systemName: "chevron.right").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-                    }
-                    .padding(.horizontal, DS.Spacing.m)
-                    .frame(maxHeight: .infinity)
-                    .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
+                    Text(r.summary).font(.system(size: 15)).foregroundStyle(DS.Color.textSecondary).lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
             } else {
-                Color.clear
+                Text("釣行が終わるとレポートがここに出ます").font(.system(size: 15)).foregroundStyle(DS.Color.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -85,7 +105,7 @@ struct LogView: View {
             HStack(spacing: DS.Spacing.m) {
                 ForEach(model.cards) { card in
                     SessionCardView(card: card, duration: model.durationText(card.session))
-                        .frame(width: 180)
+                        .frame(width: 200)
                         .onTapGesture { detail = card.session }
                         .onLongPressGesture { deleting = card.session }
                 }
@@ -97,47 +117,56 @@ struct LogView: View {
     }
 
     private var analysisCards: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let bestHour = model.byHour.max { $0.count < $1.count }
+        let bestTide = model.byTide.max { $0.count < $1.count }
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: DS.Spacing.m) {
-                analysisCard(.hour, headline: model.byHour.max { $0.count < $1.count }.map { $0.count > 0 ? "\($0.hour)時" : "—" } ?? "—") {
+                analysisCard(.hour, title: "時間帯", number: bestHour.map { $0.count > 0 ? "\($0.count)" : "—" } ?? "—",
+                             sub: bestHour.map { $0.count > 0 ? "\($0.hour)時がいちばん釣れる" : "" } ?? "") {
                     Chart(model.byHour, id: \.hour) { h in
-                        BarMark(x: .value("時", h.hour), y: .value("尾", h.count)).foregroundStyle(DS.Color.accent)
+                        BarMark(x: .value("時", h.hour), y: .value("尾", h.count))
+                            .foregroundStyle(h.hour == bestHour?.hour && h.count > 0 ? DS.Color.accent : DS.Color.secondary)
+                            .cornerRadius(2)
                     }
-                    .chartXAxis { AxisMarks(values: [0, 6, 12, 18]) { v in AxisValueLabel().foregroundStyle(DS.Color.textTertiary) } }
+                    .chartXAxis { AxisMarks(values: [0, 6, 12, 18]) { _ in AxisValueLabel().font(.system(size: 9)).foregroundStyle(DS.Color.textTertiary) } }
                     .chartYAxis(.hidden)
                 }
-                analysisCard(.tide, headline: model.byTide.prefix(3).max { $0.count < $1.count }.map { $0.count > 0 ? $0.label : "—" } ?? "—") {
+                analysisCard(.tide, title: "潮", number: bestTide.map { $0.count > 0 ? "\($0.count)" : "—" } ?? "—",
+                             sub: bestTide.map { $0.count > 0 ? "\($0.label)でよく釣れる" : "" } ?? "") {
                     Chart(model.byTide, id: \.label) { t in
-                        BarMark(x: .value("潮", t.label), y: .value("尾", t.count)).foregroundStyle(DS.Color.accent)
+                        BarMark(x: .value("潮", t.label), y: .value("尾", t.count))
+                            .foregroundStyle(t.label == bestTide?.label && t.count > 0 ? DS.Color.accent : DS.Color.secondary)
+                            .cornerRadius(2)
                     }
                     .chartXAxis { AxisMarks { _ in AxisValueLabel().font(.system(size: 8)).foregroundStyle(DS.Color.textTertiary) } }
                     .chartYAxis(.hidden)
                 }
-                analysisCard(.spot, headline: model.bySpot.first.map { String(format: "%.1f尾/h", $0.perHour) } ?? "—") {
+                analysisCard(.spot, title: "釣り場", number: model.bySpot.first.map { String(format: "%.1f", $0.perHour) } ?? "—",
+                             sub: model.bySpot.first.map { "\($0.name) 尾/時" } ?? "") {
                     Chart(model.bySpot.prefix(5), id: \.name) { s in
-                        BarMark(x: .value("尾/h", s.perHour), y: .value("釣り場", s.name)).foregroundStyle(DS.Color.accent)
+                        BarMark(x: .value("釣り場", String(s.name.prefix(4))), y: .value("尾/h", s.perHour))
+                            .foregroundStyle(s.name == model.bySpot.first?.name ? DS.Color.accent : DS.Color.secondary)
+                            .cornerRadius(2)
                     }
-                    .chartXAxis(.hidden)
-                    .chartYAxis { AxisMarks { _ in AxisValueLabel().font(.system(size: 9)).foregroundStyle(DS.Color.textSecondary) } }
+                    .chartXAxis { AxisMarks { _ in AxisValueLabel().font(.system(size: 8)).foregroundStyle(DS.Color.textTertiary) } }
+                    .chartYAxis(.hidden)
                 }
             }
         }
     }
 
-    private func analysisCard<C: View>(_ kind: AnalysisKind, headline: String, @ViewBuilder chart: () -> C) -> some View {
+    private func analysisCard<C: View>(_ kind: AnalysisKind, title: String, number: String, sub: String, @ViewBuilder chart: () -> C) -> some View {
         Button { analysis = kind } label: {
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                HStack {
-                    Text(kind == .hour ? "時間帯" : (kind == .tide ? "潮" : "釣り場")).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-                    Spacer()
-                    Text(headline).font(DS.Font.number(16)).foregroundStyle(DS.Color.accent)
-                }
+                Text(title).font(.system(size: 15, weight: .medium)).foregroundStyle(DS.Color.textPrimary)
+                Text(sub).font(.system(size: 10)).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
                 chart()
+                Text(number).font(DS.Font.score(36)).foregroundStyle(DS.Color.textPrimary).lineLimit(1).minimumScaleFactor(0.6)
             }
             .padding(DS.Spacing.m)
-            .frame(width: 220)
-            .frame(maxHeight: .infinity)
-            .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+            .frame(width: 165)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -154,20 +183,20 @@ struct SessionCardView: View {
                 Image(uiImage: ui).resizable().scaledToFill()
                     .overlay(LinearGradient(colors: [.clear, DS.Color.background.opacity(0.85)], startPoint: .center, endPoint: .bottom))
             } else {
-                DS.Color.surface
+                // ボウズ・写真なしはグレーの面（確定画像）
+                card.session.isBlank ? Color(red: 0.55, green: 0.55, blue: 0.57) : DS.Color.panel
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(card.session.startedAt, format: .dateTime.month().day()).font(DS.Font.number(15)).foregroundStyle(DS.Color.textPrimary)
-                Text(card.spotName).font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary).lineLimit(1)
-                HStack(spacing: DS.Spacing.s) {
-                    Text(card.session.isBlank ? "ボウズ" : "\(card.session.catches.count)尾").font(DS.Font.number(14))
-                        .foregroundStyle(card.session.isBlank ? DS.Color.textTertiary : DS.Color.accent)
+                Text(card.session.startedAt, format: .dateTime.year().month(.twoDigits).day(.twoDigits)).font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
+                Text(card.spotName).font(.system(size: 20, weight: .bold)).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.s) {
+                    Text(card.session.isBlank ? "ボウズ" : "\(card.session.catches.count)").font(DS.Font.number(24))
+                        .foregroundStyle(card.session.isBlank ? DS.Color.textSecondary : DS.Color.textPrimary)
                     Text(duration).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
                 }
             }
             .padding(DS.Spacing.m)
         }
         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
-        .opacity(card.session.isBlank ? 0.7 : 1)
     }
 }

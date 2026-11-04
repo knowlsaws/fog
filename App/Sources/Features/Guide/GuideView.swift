@@ -14,7 +14,7 @@ struct GuideView: View {
     @State private var goCapture = false
     @Environment(\.captureTab) private var captureTab
 
-    private let columns = [GridItem(.flexible(), spacing: DS.Spacing.s), GridItem(.flexible(), spacing: DS.Spacing.s), GridItem(.flexible(), spacing: DS.Spacing.s)]
+    private let columns = [GridItem(.flexible(), spacing: DS.Spacing.m), GridItem(.flexible(), spacing: DS.Spacing.m), GridItem(.flexible(), spacing: DS.Spacing.m)]
 
     var body: some View {
         VStack(spacing: DS.Spacing.s) {
@@ -28,7 +28,7 @@ struct GuideView: View {
                 Spacer()
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
-                    LazyVGrid(columns: columns, spacing: DS.Spacing.s) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: DS.Spacing.m) {
                         ForEach(Guide.sorted(entries, by: sort), id: \.species) { e in
                             GuideTile(entry: e, thumbnail: services.store.thumbnail(catchID: e.bestCatchID))
                                 .onTapGesture { selected = e }
@@ -44,22 +44,35 @@ struct GuideView: View {
         .sheet(item: $selected) { SpeciesDetailView(entry: $0).onDisappear(perform: reload) }
     }
 
+    /// 上：魚種数と尾数のチップ、右に並び順。下：見出し「図鑑」（確定画像）
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("\(entries.count)").font(DS.Font.number(24)).foregroundStyle(DS.Color.textPrimary)
-            Text("種").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-            Text("\(entries.reduce(0) { $0 + $1.count })").font(DS.Font.number(24)).foregroundStyle(DS.Color.textPrimary)
-            Text("尾").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-            Spacer()
-            Menu {
-                Button("最大サイズ") { sort = .maxLength }
-                Button("最近") { sort = .recent }
-                Button("尾数") { sort = .count }
-            } label: {
-                Image(systemName: sort == .maxLength ? "ruler" : (sort == .recent ? "clock" : "number")).font(.system(size: 16)).foregroundStyle(DS.Color.textSecondary)
+        VStack(alignment: .leading, spacing: DS.Spacing.s) {
+            HStack(spacing: DS.Spacing.s) {
+                countChip(system: "fish.fill", value: entries.count, unit: "種")
+                countChip(system: "heart.fill", value: entries.reduce(0) { $0 + $1.count }, unit: "尾")
+                Spacer()
+                Menu {
+                    Button("最大サイズ") { sort = .maxLength }
+                    Button("最近") { sort = .recent }
+                    Button("尾数") { sort = .count }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down").font(.system(size: 17, weight: .semibold)).foregroundStyle(DS.Color.textSecondary).frame(width: 32, height: 32)
+                }
             }
+            Text("図鑑").font(.system(size: 34, weight: .bold)).foregroundStyle(DS.Color.textPrimary)
         }
-        .frame(height: 44)
+        .padding(.top, DS.Spacing.s)
+    }
+
+    private func countChip(system: String, value: Int, unit: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: system).font(.system(size: 11, weight: .semibold))
+            Text("\(value)").font(DS.Font.number(13))
+            Text(unit).font(DS.Font.caption)
+        }
+        .foregroundStyle(DS.Color.textSecondary)
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(DS.Color.panel, in: Capsule())
     }
 
     private func reload() {
@@ -72,30 +85,36 @@ struct GuideView: View {
 struct CaptureTabKey: EnvironmentKey { static let defaultValue: (() -> Void)? = nil }
 extension EnvironmentValues { var captureTab: (() -> Void)? { get { self[CaptureTabKey.self] } set { self[CaptureTabKey.self] = newValue } } }
 
+/// タイル：写真（正方形）、魚種名、最大全長。直近 1 週間の記録更新は写真の角にオレンジの点（確定画像のカード型）。
 struct GuideTile: View {
     let entry: GuideEntry
     let thumbnail: Data?
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let thumbnail, let ui = UIImage(data: thumbnail) {
-                Image(uiImage: ui).resizable().scaledToFill()
-            } else {
-                DS.Color.surface
-                Image(systemName: "fish.fill").font(.system(size: 28)).foregroundStyle(DS.Color.faded).frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .topTrailing) {
+                Group {
+                    if let thumbnail, let ui = UIImage(data: thumbnail) {
+                        Image(uiImage: ui).resizable().scaledToFill()
+                    } else {
+                        ZStack {
+                            DS.Color.surfaceRaised
+                            Image(systemName: "fish.fill").font(.system(size: 28)).foregroundStyle(DS.Color.faded)
+                        }
+                    }
+                }
+                .aspectRatio(1, contentMode: .fill)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                if entry.recentlyUpdated {
+                    Circle().fill(DS.Color.accent).frame(width: 10, height: 10).padding(8)
+                }
             }
-            LinearGradient(colors: [.clear, DS.Color.background.opacity(0.85)], startPoint: .center, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(entry.species).font(DS.Font.caption).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
-                Text(entry.maxLengthCm.map { "\(Int($0.rounded()))cm" } ?? "—").font(DS.Font.number(13)).foregroundStyle(DS.Color.textSecondary)
-            }
-            .padding(DS.Spacing.s)
-            if entry.recentlyUpdated {
-                VStack { HStack { Spacer(); Circle().fill(DS.Color.accent).frame(width: 8, height: 8).padding(DS.Spacing.s) }; Spacer() }
-            }
+            Text(entry.species).font(.system(size: 14, weight: .medium)).foregroundStyle(DS.Color.textPrimary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            Text(entry.maxLengthCm.map { "\(Int($0.rounded())) cm" } ?? "—").font(DS.Font.number(12)).foregroundStyle(DS.Color.textTertiary)
         }
-        .aspectRatio(1, contentMode: .fill)
-        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -209,10 +228,18 @@ struct CatchEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var species: String = ""
     @State private var lengthText: String = ""
+    @State private var deleting: Catch?
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.m) {
-            Text("修正").font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
+            HStack {
+                Text("修正").font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
+                Spacer()
+                Button(role: .destructive) { deleting = catchItem } label: {
+                    Label("この釣果を削除", systemImage: "trash").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DS.Spacing.s) {
                     ForEach(Species.initialCatalog) { s in
@@ -246,5 +273,38 @@ struct CatchEditSheet: View {
         .padding(DS.Spacing.l)
         .background(DS.Color.background)
         .onAppear { species = catchItem.species; lengthText = catchItem.lengthCm.map { String(Int($0.rounded())) } ?? "" }
+        .catchDeleteDialog(item: $deleting) { _ in onDone(); dismiss() }
+    }
+}
+
+/// 釣果の削除ダイアログ：記録だけ消すか、フォトライブラリの写真も消すか。
+struct CatchDeleteDialog: ViewModifier {
+    @Binding var item: Catch?
+    let onDeleted: (Catch) -> Void
+    @Environment(AppServices.self) private var services
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog("この釣果を削除", isPresented: Binding(get: { item != nil }, set: { if !$0 { item = nil } }), titleVisibility: .visible) {
+            Button("記録だけ削除", role: .destructive) { run(deletePhoto: false) }
+            Button("写真ライブラリからも削除", role: .destructive) { run(deletePhoto: true) }
+            Button("キャンセル", role: .cancel) { item = nil }
+        } message: {
+            Text("削除した釣果は分析からも外れます")
+        }
+    }
+
+    private func run(deletePhoto: Bool) {
+        guard let c = item else { return }
+        item = nil
+        Task { @MainActor in
+            await services.capture.deleteCatch(id: c.id, deletePhoto: deletePhoto)
+            onDeleted(c)
+        }
+    }
+}
+
+extension View {
+    func catchDeleteDialog(item: Binding<Catch?>, onDeleted: @escaping (Catch) -> Void) -> some View {
+        modifier(CatchDeleteDialog(item: item, onDeleted: onDeleted))
     }
 }
