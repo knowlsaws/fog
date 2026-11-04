@@ -64,9 +64,15 @@ final class HomeViewModel {
     struct DayOutlook: Identifiable {
         let offset: Int
         let dayStart: Date
-        let maxScore: Int
+        /// 推移の範囲外（データなし）なら nil
+        let maxScore: Int?
         let conditionCode: String?
+        /// 曜日。1=日 … 7=土
+        let weekday: Int
+        /// 祝日（振替休日・国民の休日を含む）
+        let isHoliday: Bool
         var id: Int { offset }
+        var available: Bool { maxScore != nil }
     }
     private(set) var weekOutlook: [DayOutlook] = []
 
@@ -251,21 +257,28 @@ final class HomeViewModel {
         dayMoon = MoonCalculator.times(on: noon, at: coordinate, timeZone: timeZone)
     }
 
-    /// 週間の見通し：表示中の日の前日から 7 日分（表示中の日に合わせて動く）。各日の最高釣れ率と昼 12 時の天気
+    /// 週間の見通し：表示中の日を含む月曜〜日曜の 7 日（週の並びは固定）。各日の最高釣れ率と昼 12 時の天気。
+    /// 推移の範囲外の日は日付だけ出す（釣れ率・天気なし、タップ不可）
     private func updateWeekOutlook() {
         let range = dayOffsetRange
-        var first = max(range.lowerBound, dayOffset - 1)
-        if first + 6 > range.upperBound { first = max(range.lowerBound, range.upperBound - 6) }
         var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
         let today = cal.startOfDay(for: now)
+        let shown = today.addingTimeInterval(Double(min(max(dayOffset, range.lowerBound), range.upperBound)) * 86_400)
+        let shownWeekday = cal.component(.weekday, from: shown) // 1=日 … 7=土
+        let monday = dayOffset - (shownWeekday + 5) % 7
         var out: [DayOutlook] = []
-        for offset in first...min(range.upperBound, first + 6) {
+        for offset in monday...(monday + 6) {
             let start = today.addingTimeInterval(Double(offset) * 86_400)
-            guard let best = dayData(offset).timeline.map(\.score).max() else { continue }
+            let ymd = cal.dateComponents([.year, .month, .day, .weekday], from: start)
+            let holiday = JapaneseHolidays.isHoliday(year: ymd.year ?? 0, month: ymd.month ?? 0, day: ymd.day ?? 0)
+            guard range.contains(offset), let best = dayData(offset).timeline.map(\.score).max() else {
+                out.append(DayOutlook(offset: offset, dayStart: start, maxScore: nil, conditionCode: nil, weekday: ymd.weekday ?? 0, isHoliday: holiday))
+                continue
+            }
             let noon = start.addingTimeInterval(12 * 3600)
             let cond = services.map { $0.environment.snapshot(at: noon, coordinate: coordinate).conditionCode } ?? nil
             let beyond = forecastHorizon.map { noon > $0 } ?? true
-            out.append(DayOutlook(offset: offset, dayStart: start, maxScore: best, conditionCode: beyond ? nil : cond))
+            out.append(DayOutlook(offset: offset, dayStart: start, maxScore: best, conditionCode: beyond ? nil : cond, weekday: ymd.weekday ?? 0, isHoliday: holiday))
         }
         weekOutlook = out
     }
