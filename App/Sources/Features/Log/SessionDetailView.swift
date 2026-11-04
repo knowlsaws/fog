@@ -8,6 +8,8 @@ struct SessionDetailView: View {
     let session: Core.Session
     let spotName: String
     @Environment(AppServices.self) private var services
+    @State private var deleting: Catch?
+    @State private var removedIDs: Set<UUID> = []
 
     var body: some View {
         ScrollView {
@@ -68,9 +70,10 @@ struct SessionDetailView: View {
         }
     }
 
+    /// 釣果の一覧。長押しで削除（記録だけ／写真も）。
     private var catches: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.s) {
-            ForEach(session.catches, id: \.id) { c in
+            ForEach(session.catches.filter { !removedIDs.contains($0.id) }, id: \.id) { c in
                 HStack(spacing: DS.Spacing.m) {
                     if let data = services.store.thumbnail(catchID: c.id), let ui = UIImage(data: data) {
                         Image(uiImage: ui).resizable().scaledToFill().frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: DS.Radius.chip))
@@ -92,8 +95,11 @@ struct SessionDetailView: View {
                     }
                     Spacer()
                 }
+                .contentShape(Rectangle())
+                .onLongPressGesture { deleting = c }
             }
         }
+        .catchDeleteDialog(item: $deleting) { removedIDs.insert($0.id) }
     }
 }
 

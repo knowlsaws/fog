@@ -228,10 +228,18 @@ struct CatchEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var species: String = ""
     @State private var lengthText: String = ""
+    @State private var deleting: Catch?
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.m) {
-            Text("修正").font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
+            HStack {
+                Text("修正").font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
+                Spacer()
+                Button(role: .destructive) { deleting = catchItem } label: {
+                    Label("この釣果を削除", systemImage: "trash").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DS.Spacing.s) {
                     ForEach(Species.initialCatalog) { s in
@@ -265,5 +273,38 @@ struct CatchEditSheet: View {
         .padding(DS.Spacing.l)
         .background(DS.Color.background)
         .onAppear { species = catchItem.species; lengthText = catchItem.lengthCm.map { String(Int($0.rounded())) } ?? "" }
+        .catchDeleteDialog(item: $deleting) { _ in onDone(); dismiss() }
+    }
+}
+
+/// 釣果の削除ダイアログ：記録だけ消すか、フォトライブラリの写真も消すか。
+struct CatchDeleteDialog: ViewModifier {
+    @Binding var item: Catch?
+    let onDeleted: (Catch) -> Void
+    @Environment(AppServices.self) private var services
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog("この釣果を削除", isPresented: Binding(get: { item != nil }, set: { if !$0 { item = nil } }), titleVisibility: .visible) {
+            Button("記録だけ削除", role: .destructive) { run(deletePhoto: false) }
+            Button("写真ライブラリからも削除", role: .destructive) { run(deletePhoto: true) }
+            Button("キャンセル", role: .cancel) { item = nil }
+        } message: {
+            Text("削除した釣果は分析からも外れます")
+        }
+    }
+
+    private func run(deletePhoto: Bool) {
+        guard let c = item else { return }
+        item = nil
+        Task { @MainActor in
+            await services.capture.deleteCatch(id: c.id, deletePhoto: deletePhoto)
+            onDeleted(c)
+        }
+    }
+}
+
+extension View {
+    func catchDeleteDialog(item: Binding<Catch?>, onDeleted: @escaping (Catch) -> Void) -> some View {
+        modifier(CatchDeleteDialog(item: item, onDeleted: onDeleted))
     }
 }

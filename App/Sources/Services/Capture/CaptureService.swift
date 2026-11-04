@@ -129,6 +129,15 @@ final class CaptureService {
         return session
     }
 
+    /// 釣果の削除。写真は求められたときだけライブラリからも消す（削除は分析に即時反映）。
+    func deleteCatch(id: UUID, deletePhoto: Bool) async {
+        let item = (try? store.catches())?.first { $0.id == id }
+        try? store.deleteCatch(id: id)
+        if deletePhoto, let item {
+            await PhotoLibraryService.delete(identifiers: [item.photoLocalIdentifier].compactMap { $0 } + item.photoLocalIdentifiers)
+        }
+    }
+
     /// サイズの手入力・修正（F-12/F-24）。手入力は推定幅 0.5 cm とする。
     func setLength(catchID: UUID, lengthCm: Double?) {
         guard let all = try? store.sessions(), var session = all.first(where: { $0.catches.contains { $0.id == catchID } }),
