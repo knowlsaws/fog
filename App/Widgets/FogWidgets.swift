@@ -9,6 +9,8 @@ private enum WColor {
     static let background = Color(red: 0.043, green: 0.043, blue: 0.047)
     static let accent = Color(red: 0.45, green: 0.62, blue: 0.47)   // テーマ色（緑）
     static let secondary = Color(red: 0.45, green: 0.62, blue: 0.47)
+    static let sea = Color(red: 0.30, green: 0.62, blue: 0.95)
+    static let sun = Color(red: 0.96, green: 0.77, blue: 0.26)
     static let textSecondary = Color.white.opacity(0.7)
     static let textTertiary = Color.white.opacity(0.4)
 }
@@ -27,6 +29,14 @@ struct ScoreEntry: TimelineEntry {
     let tide: [WidgetSnapshot.Point]
     let tideRange: ClosedRange<Double>?
     let hasData: Bool
+    /// 中ウィジェットの具体的な情報
+    var nextTide: WidgetSnapshot.Event? = nil
+    var nextTwilight: WidgetSnapshot.Event? = nil
+    var tideLevelCm: Double? = nil
+    var airTemperatureC: Double? = nil
+    var windSpeedMS: Double? = nil
+    var windDirectionDeg: Double? = nil
+    var conditionCode: String? = nil
 
     static func sample(_ date: Date = .now) -> ScoreEntry {
         let pts = (0..<48).map { i in WidgetSnapshot.Point(at: date.addingTimeInterval(Double(i - 24) * 900), score: 72, tideRising: true, tideLevelCm: 100 + 60 * sin(Double(i) / 48 * .pi * 2)) }
@@ -44,7 +54,11 @@ struct ScoreEntry: TimelineEntry {
         let tide = s.points.filter { window.contains($0.at) && $0.tideLevelCm != nil }
         return ScoreEntry(date: date, score: p?.score ?? 0, tideRising: p?.tideRising, nextEvent: s.nextEvent(after: date),
                           isRecording: s.isRecording, tackle: s.tackle ?? FogShared.currentTackle, spotName: s.spotName,
-                          tide: tide, tideRange: s.tideRange(from: window.lowerBound, to: window.upperBound), hasData: p != nil)
+                          tide: tide, tideRange: s.tideRange(from: window.lowerBound, to: window.upperBound), hasData: p != nil,
+                          nextTide: s.nextEvent(after: date, kinds: ["highTide", "lowTide"]),
+                          nextTwilight: s.nextEvent(after: date, kinds: ["dawn", "dusk"]),
+                          tideLevelCm: p?.tideLevelCm, airTemperatureC: p?.airTemperatureC, windSpeedMS: p?.windSpeedMS,
+                          windDirectionDeg: p?.windDirectionDeg, conditionCode: p?.conditionCode)
     }
 }
 
@@ -230,7 +244,7 @@ private struct RoundAction<Content: View>: View {
             Circle().stroke(accent ? WColor.accent : Color.white.opacity(0.22), lineWidth: accent ? 1.5 : 1)
             content
         }
-        .frame(width: 54, height: 54)
+        .frame(width: 46, height: 46)
     }
 }
 
@@ -266,18 +280,49 @@ struct SmallScoreView: View {
 struct MediumScoreView: View {
     let entry: ScoreEntry
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 14) {
-                Text("\(entry.score)")
-                    .font(.system(size: 50, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .minimumScaleFactor(0.7)
-                    .frame(minWidth: 70, alignment: .leading)
-                TideGraph(points: entry.tide, range: entry.tideRange, now: entry.date)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
+        VStack(spacing: 8) {
+            VStack(spacing: 4) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("\(entry.score)")
+                            .font(.system(size: 44, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .minimumScaleFactor(0.7)
+                        Text(entry.spotName.isEmpty ? "釣れ率" : entry.spotName).font(.system(size: 10, weight: .medium)).foregroundStyle(WColor.textTertiary).lineLimit(1)
+                    }
+                    .frame(minWidth: 64, alignment: .leading)
+                    ZStack(alignment: .topTrailing) {
+                        TideGraph(points: entry.tide, range: entry.tideRange, now: entry.date)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                        if let cm = entry.tideLevelCm {
+                            HStack(spacing: 2) {
+                                Text("\(Int(cm.rounded()))cm").font(.system(size: 10, weight: .bold, design: .rounded))
+                                Image(systemName: entry.tideRising == nil ? "minus" : (entry.tideRising! ? "arrow.up" : "arrow.down")).font(.system(size: 8, weight: .bold))
+                            }
+                            .foregroundStyle(WColor.sea)
+                        }
+                    }
+                }
+                // 具体的な情報：次の満干、次のマズメ、気温と風
+                HStack(spacing: 10) {
+                    if let t = entry.nextTide {
+                        infoItem(icon: t.kind == "highTide" ? "arrow.up" : "arrow.down", color: WColor.sea, text: Self.hm(t.at) + " " + t.label)
+                    }
+                    if let m = entry.nextTwilight {
+                        infoItem(icon: "sun.horizon.fill", color: WColor.sun, text: Self.hm(m.at) + " " + m.label)
+                    }
+                    Spacer(minLength: 0)
+                    if let temp = entry.airTemperatureC {
+                        Text("\(Int(temp.rounded()))°").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    }
+                    if let w = entry.windSpeedMS {
+                        infoItem(icon: "location.north.fill", color: .white, text: "\(Int(w.rounded()))m/s " + (entry.windDirectionDeg.map(Self.compass) ?? ""),
+                                 rotation: (entry.windDirectionDeg ?? 0) + 180)
+                    }
+                }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(Color(red: 0.13, green: 0.13, blue: 0.14), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             HStack {
@@ -307,6 +352,25 @@ struct MediumScoreView: View {
         .padding(12)
         .fogWidgetBackground(recording: entry.isRecording)
         .widgetURL(URL(string: "fog://home"))
+    }
+}
+
+extension MediumScoreView {
+    func infoItem(icon: String, color: Color, text: String, rotation: Double = 0) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 9, weight: .bold)).foregroundStyle(color).rotationEffect(.degrees(rotation))
+            Text(text).font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(WColor.textSecondary).lineLimit(1)
+        }
+    }
+
+    static func hm(_ d: Date) -> String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "ja_JP"); f.timeZone = TimeZone(identifier: "Asia/Tokyo"); f.dateFormat = "H:mm"
+        return f.string(from: d)
+    }
+
+    static func compass(_ deg: Double) -> String {
+        let names = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"]
+        return names[max(0, Int(((deg + 22.5).truncatingRemainder(dividingBy: 360)) / 45) % 8)]
     }
 }
 

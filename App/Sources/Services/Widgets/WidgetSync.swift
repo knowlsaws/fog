@@ -5,17 +5,20 @@ import Core
 /// ホームの計算結果をウィジェット用スナップショットに書き出し、ウィジェットを更新する（§8）。
 @MainActor
 enum WidgetSync {
-    static func publish(spotName: String, timeline: [ScorePoint], tide: TideEngine?, events: [ScoreEvent], isRecording: Bool, tackle: TackleKind?) {
+    static func publish(spotName: String, timeline: [ScorePoint], tide: TideEngine?, events: [ScoreEvent], isRecording: Bool, tackle: TackleKind?,
+                        envAt: (Date) -> EnvSnapshot) {
         let points = timeline.map { p -> WidgetSnapshot.Point in
             var rising: Bool?
             if let tide {
                 let rate = tide.rate(at: p.at)
                 rising = abs(rate) < 2 ? nil : rate > 0
             }
-            return WidgetSnapshot.Point(at: p.at, score: p.score, tideRising: rising, tideLevelCm: tide?.level(at: p.at))
+            let e = envAt(p.at)
+            return WidgetSnapshot.Point(at: p.at, score: p.score, tideRising: rising, tideLevelCm: tide?.level(at: p.at),
+                                        airTemperatureC: e.airTemperatureC, windSpeedMS: e.windSpeedMS, windDirectionDeg: e.windDirectionDeg, conditionCode: e.conditionCode)
         }
         let snapshot = WidgetSnapshot(spotName: spotName, points: points,
-                                      events: events.map { WidgetSnapshot.Event(at: $0.at, label: $0.label) },
+                                      events: events.map { WidgetSnapshot.Event(at: $0.at, label: $0.label, kind: $0.kind.rawValue) },
                                       isRecording: isRecording, tackle: tackle)
         FogShared.saveSnapshot(snapshot)
         WidgetCenter.shared.reloadAllTimelines()
