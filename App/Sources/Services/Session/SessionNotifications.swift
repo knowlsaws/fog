@@ -32,10 +32,12 @@ enum SessionNotifications {
     }
 
     static func sessionStarted(spotName: String, sessionID: UUID) {
+        guard NotificationSettings.isEnabled(.sessionStart) else { return }
         post(id: "session.start.\(sessionID)", category: startCategory, title: spotName, body: "記録を始めました", sessionID: sessionID)
     }
 
     static func sessionEnded(spotName: String, catches: Int, summary: String?, sessionID: UUID) {
+        guard NotificationSettings.isEnabled(.sessionEnd) else { return }
         let body = summary ?? (catches == 0 ? "ボウズ" : "\(catches)尾")
         post(id: "session.end.\(sessionID)", category: endCategory, title: spotName, body: body, sessionID: sessionID)
     }
