@@ -22,10 +22,11 @@ struct LogView: View {
                 sessionCards.frame(height: geo.size.height * 0.32)
                 Text("分析").font(.system(size: 22, weight: .bold)).foregroundStyle(DS.Color.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading).frame(height: geo.size.height * 0.045)
-                analysisCards.frame(height: geo.size.height * 0.29)
+                analysisCards.frame(height: geo.size.height * 0.37)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, DS.Spacing.l)
+            .padding(.bottom, DS.Spacing.s)
         }
         .onAppear { model.attach(services) }
         .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in model.refresh() }

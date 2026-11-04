@@ -137,7 +137,7 @@ final class CaptureService {
         }
         let previous = (try? store.sessions())?.first
         let session = Core.Session(spotID: spot.id, startedAt: date, tackle: previous?.tackle, rigID: previous?.rigID,
-                                   track: [TrackSample(at: date, coordinate: location)], tackleID: previous?.tackleID, isAutoDetected: false)
+                                   track: [TrackSample(at: date, coordinate: (coordinate?.isPlausible == true ? coordinate : nil) ?? spot.coordinate)], tackleID: previous?.tackleID, isAutoDetected: false)
         try? store.upsert(session)
         return session
     }

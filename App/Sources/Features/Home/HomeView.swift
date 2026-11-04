@@ -14,14 +14,15 @@ struct HomeView: View {
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
-                header.frame(height: geo.size.height * 0.07)
-                scoreArea.frame(height: geo.size.height * 0.19)
-                chipsRow.frame(height: geo.size.height * 0.11)
-                eventsRow.frame(height: geo.size.height * 0.06)
-                ForecastChart(model: model).frame(height: geo.size.height * 0.47)
+                header.frame(height: geo.size.height * 0.08)
+                scoreArea.frame(height: geo.size.height * 0.20)
+                chipsRow.frame(height: geo.size.height * 0.12)
+                eventsRow.frame(height: geo.size.height * 0.065)
+                ForecastChart(model: model).frame(height: geo.size.height * 0.52)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, DS.Spacing.l)
+            .padding(.bottom, DS.Spacing.s)
         }
         .onAppear { model.attach(services) }
         .task { await model.refresh() }

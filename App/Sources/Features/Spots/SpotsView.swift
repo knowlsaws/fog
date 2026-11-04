@@ -120,7 +120,7 @@ struct SpotsView: View {
                 .scrollTargetBehavior(.viewAligned)
                 .scrollPosition(id: $selectedID)
                 .frame(height: geo.size.height * 0.30)
-                .padding(.bottom, 96)
+                .padding(.bottom, DS.Spacing.m)
             }
         }
     }
