@@ -1,20 +1,20 @@
 # 魚種判定の対象リスト（初期）
 
-北海道・道南の漁港ロックフィッシュを優先。L6 で学習データを集めながら増減する。
+北海道・道南の漁港ロックフィッシュを優先。学習データは `scripts/train_classifier/`（公開データ＋開発者の写真）。Core の `Species.initialCatalog` と同じ内容にする。
 
-| 標準和名 | 地方名・別名 | 優先 |
-| --- | --- | --- |
-| アイナメ | アブラコ | 高 |
-| クロソイ | ソイ | 高 |
-| マゾイ（キツネメバル） | マゾイ | 高 |
-| シマゾイ | | 高 |
-| エゾメバル | ガヤ | 高 |
-| ムラソイ | ハチガラ | 高 |
-| カジカ（トゲカジカ・ギスカジカ） | ナベコワシ | 中 |
-| ホッケ | | 中 |
-| クジメ | | 中 |
-| マコガレイ・クロガシラガレイ | カレイ | 中 |
-| ウグイ | | 低（外道） |
-| ヒラメ | | 低 |
-| ブリ（イナダ・フクラギ） | | 低 |
-| サクラマス | | 低 |
+| 標準和名 | 地方名・別名 | 優先 | 学名（iNaturalist 検索用） |
+| --- | --- | --- | --- |
+| アイナメ | アブラコ | 高 | Hexagrammos otakii |
+| クロソイ | ソイ | 高 | Sebastes schlegelii |
+| マゾイ（キツネメバル） | マゾイ | 高 | Sebastes vulpes |
+| シマゾイ | | 高 | Sebastes trivittatus |
+| エゾメバル | ガヤ | 高 | Sebastes taczanowskii |
+| ムラソイ | ハチガラ | 高 | Sebastes pachycephalus |
+| カジカ（トゲカジカ・ギスカジカ） | ナベコワシ | 中 | Myoxocephalus polyacanthocephalus |
+| ホッケ | | 中 | Pleurogrammus azonus |
+| クジメ | | 中 | Hexagrammos agrammus |
+| マコガレイ・クロガシラガレイ | カレイ | 中 | Pseudopleuronectes yokohamae / P. schrenki |
+| ウグイ | | 低（外道） | Pseudaspius hakonensis |
+| ヒラメ | | 低 | Paralichthys olivaceus |
+| ブリ（イナダ・フクラギ） | | 低 | Seriola quinqueradiata |
+| サクラマス | | 低 | Oncorhynchus masou |
