@@ -48,6 +48,12 @@ appstoreconnect.apple.com
 3. `testflight` ワークフローが走り、10〜20分後に TestFlight に通知が来る。インストールして5タブが出れば L0 完了
 4. 以降は「次のループを始めて」の繰り返し。気づいたことは `feedback` ラベルの Issue にする
 
+## 4.5 全ループ完了後の実機検証
+
+L1〜L15 がマージされたら、`docs/06_device_verification.md` のチェックリストを iPhone 16 Pro で上から確認する。
+丸一日の釣行（バッテリー・自動検出のしきい値）が含まれるので、数回の釣行に分けてよい。
+問題は 1 件ずつ `feedback` ラベルの Issue にし、Claude Code に「feedback を処理して」と指示する。
+
 ## 5. 自分で決めること（いつでもよい）
 
 - アプリの正式名（表示名）。決まったら `project.yml` の `CFBundleDisplayName` を変える

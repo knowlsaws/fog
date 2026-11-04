@@ -11,6 +11,7 @@
 3. `docs/03_loop_plan.md` — ループ計画。**今どのループか・次に何をするかはここが正**
 4. `docs/04_decisions.md` — 決定事項ログ。迷ったらここに書いてから進む
 5. `docs/research/data_sources.md` — 潮汐・海況・釣果情報の取得元の調査結果
+6. `docs/06_device_verification.md` — 実機検証チェックリスト（L16、開発者が iPhone で確認する項目）
 
 ## 絶対に守る3原則
 

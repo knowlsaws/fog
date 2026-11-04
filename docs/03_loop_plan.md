@@ -9,22 +9,22 @@
 | # | ループ | 状態 | PR | 備考 |
 | --- | --- | --- | --- | --- |
 | L0 | リポジトリ基盤と CI | done | main 直push (〜aebdfc6) | 2026-11-04 TestFlight build 5 を iPhone 16 Pro で確認、5タブ表示OK。build 8 で証明書上限に当たり、署名を手動署名＋証明書永続化に変更（PR #2） |
-| L1 | データモデルと永続化 | review | #1 | CI 緑。ダミー釣行が TestFlight で再起動後も残るかの確認待ち。ブランチ `claude/l1-start-78ajhc` |
-| L2 | 天文計算と潮汐エンジン（Core） | in_progress | | ブランチ `loop/L2-astro-tide` |
-| L3 | 環境データ取得 | review | #4 | CI 緑。ブランチ `loop/L3-environment`。WeatherKit・Open-Meteo の実通信は実機確認待ち |
-| L4 | 釣行セッション自動検出 | in_progress | | ブランチ `loop/L4-session-detection`（L3 の上に積む） |
-| L5 | 撮影と LiDAR サイズ推定 | in_progress | | ブランチ `loop/L5-capture` |
-| L6 | 魚種判定 | in_progress | | ブランチ `loop/L6-species`（L5 の上に積む）。モデルの学習は開発者の写真待ち |
-| L7 | 釣れ率エンジン（Core） | in_progress | | ブランチ `loop/L7-score-engine`（Core のみ、L3/L4 と並行） |
-| L8 | 統計・相関・レポート（Core＋Foundation Models） | in_progress | | ブランチ `loop/L8-analytics`（L7 の上に積む） |
-| L9 | ホーム画面 | in_progress | | ブランチ `loop/L9-home` |
-| L10 | 撮影画面の仕上げ | in_progress | | ブランチ `loop/L10-capture-polish` |
-| L11 | ログ画面 | in_progress | | ブランチ `loop/L11-log` |
-| L12 | 図鑑画面 | in_progress | | ブランチ `loop/L12-guide` |
-| L13 | 釣り場画面 | in_progress | | ブランチ `loop/L13-spots` |
-| L14 | ウィジェット・ロック画面・通知 | in_progress | | ブランチ `loop/L14-widgets`（L15 の上に積む） |
-| L15 | 設定・データ管理・iCloud | in_progress | | ブランチ `loop/L15-settings` |
-| L16 | 実機総合検証とバッテリー | pending | | |
+| L1 | データモデルと永続化 | review | #1 | マージ済み。実機確認は `docs/06_device_verification.md` §1 |
+| L2 | 天文計算と潮汐エンジン（Core） | review | #3 | マージ済み（Core）。函館の潮汐と気象庁潮位表の比較は §1 |
+| L3 | 環境データ取得 | review | #4 | マージ済み。WeatherKit・Open-Meteo の実通信は §1 |
+| L4 | 釣行セッション自動検出 | review | #5 | マージ済み。自動開始・終了は §3（しきい値は実釣で確定） |
+| L5 | 撮影と LiDAR サイズ推定 | review | #8 | マージ済み。LiDAR 計測は §2 |
+| L6 | 魚種判定 | review | #9 | マージ済み。判定モデルは未同梱（学習用写真待ち）。`scripts/train_classifier/` |
+| L7 | 釣れ率エンジン（Core） | review | #6 | マージ済み（Core） |
+| L8 | 統計・相関・レポート（Core＋Foundation Models） | review | #7 | マージ済み。Foundation Models のレポートは §4 |
+| L9 | ホーム画面 | review | #10 | マージ済み。§1 |
+| L10 | 撮影画面の仕上げ | review | #13 | マージ済み。起動 1 秒・カメラコントロールは §2 |
+| L11 | ログ画面 | review | #11 | マージ済み。§4 |
+| L12 | 図鑑画面 | review | #14 | マージ済み。§4 |
+| L13 | 釣り場画面 | review | #12 | マージ済み。§4 |
+| L14 | ウィジェット・ロック画面・通知 | review | #16 | マージ済み。ウィジェット・通知は §5 |
+| L15 | 設定・データ管理・iCloud | review | #15 | マージ済み。iCloud の機種間同期は §6 |
+| L16 | 実機総合検証とバッテリー | blocked | #17 | 開発者の作業待ち：`docs/06_device_verification.md` のチェックリストを iPhone 16 Pro で確認し、結果を `feedback` Issue にする。ダミー釣行のシードは外した |
 | L17 | COULD 要件（F-12, F-15, F-25, F-26, F-27） | pending | | 開発者が要るものだけ指示する |
 
 状態の値：`pending`（先行ループ待ち）/ `next`（次に着手）/ `in_progress` / `review`（PR 作成済み、開発者の確認待ち）/ `done` / `blocked`（開発者の作業待ち、備考に内容）
