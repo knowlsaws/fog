@@ -23,7 +23,7 @@
 | L12 | 図鑑画面 | in_progress | | ブランチ `loop/L12-guide` |
 | L13 | 釣り場画面 | in_progress | | ブランチ `loop/L13-spots` |
 | L14 | ウィジェット・ロック画面・通知 | pending | | |
-| L15 | 設定・データ管理・iCloud | pending | | |
+| L15 | 設定・データ管理・iCloud | in_progress | | ブランチ `loop/L15-settings` |
 | L16 | 実機総合検証とバッテリー | pending | | |
 | L17 | COULD 要件（F-12, F-15, F-25, F-26, F-27） | pending | | 開発者が要るものだけ指示する |
 

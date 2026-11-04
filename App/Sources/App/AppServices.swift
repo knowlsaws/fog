@@ -17,6 +17,7 @@ final class AppServices {
     let photoImport: PhotoImportService
     let report: ReportService
     let router = Router()
+    var dataManager: DataManager { DataManager(store: store) }
 
     init() {
         let persistence = PersistenceController.live()
