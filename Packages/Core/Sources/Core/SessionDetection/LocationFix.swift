@@ -23,17 +23,25 @@ public enum Mesh {
         return "\(Int(sizeM))m:\(row):\(col)"
     }
 
+    /// 経度の刻みは「行（緯度帯）の南端の緯度」で決める。点ごとの緯度で決めると同じ行でも境界が動くため。
+    static func steps(row: Int, sizeM: Double) -> (lat: Double, lon: Double) {
+        let latStep = sizeM / 111_320
+        let rowLatitude = Double(row) * latStep
+        let lonStep = sizeM / (111_320 * max(0.1, cos(Angle.rad(rowLatitude))))
+        return (latStep, lonStep)
+    }
+
     static func indices(for c: Coordinate, sizeM: Double) -> (Int, Int) {
         let latStep = sizeM / 111_320
-        let lonStep = sizeM / (111_320 * max(0.1, cos(Angle.rad(c.latitude))))
-        return (Int((c.latitude / latStep).rounded(.down)), Int((c.longitude / lonStep).rounded(.down)))
+        let row = Int((c.latitude / latStep).rounded(.down))
+        let lonStep = steps(row: row, sizeM: sizeM).lon
+        return (row, Int((c.longitude / lonStep).rounded(.down)))
     }
 
     /// メッシュの中心座標。
     public static func center(for c: Coordinate, sizeM: Double = defaultSizeM) -> Coordinate {
-        let latStep = sizeM / 111_320
-        let lonStep = sizeM / (111_320 * max(0.1, cos(Angle.rad(c.latitude))))
         let (row, col) = indices(for: c, sizeM: sizeM)
+        let (latStep, lonStep) = steps(row: row, sizeM: sizeM)
         return Coordinate(latitude: (Double(row) + 0.5) * latStep, longitude: (Double(col) + 0.5) * lonStep)
     }
 }
