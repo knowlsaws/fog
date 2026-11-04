@@ -9,7 +9,7 @@ public enum GPX {
         let parser = XMLParser(data: data)
         let delegate = Delegate()
         parser.delegate = delegate
-        parser.parse()
+        _ = parser.parse()
         return delegate.fixes
     }
 
