@@ -274,9 +274,10 @@ enum MapLayerSettings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: densityKey) }
     }
 
-    /// 色面の濃さ 0.3〜1.0
+    /// 色面の濃さ 0.15〜0.8（既定 0.4。地図が透けて見える濃さ。2026-11-05 実機フィードバック）
+    static let defaultOpacity = 0.4
     static var opacity: Double {
-        get { let v = UserDefaults.standard.double(forKey: opacityKey); return v == 0 ? 0.72 : v }
+        get { let v = UserDefaults.standard.double(forKey: opacityKey); return v == 0 ? defaultOpacity : min(0.8, max(0.15, v)) }
         set { UserDefaults.standard.set(newValue, forKey: opacityKey) }
     }
 }

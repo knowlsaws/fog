@@ -90,39 +90,96 @@ public enum OpenMeteoGrid {
         "sea_surface_temperature": .seaSurfaceTemperature, "sea_level_height_msl": .seaLevel,
     ]
 
-    public enum DecodeError: Error, Equatable { case invalid, api(String), countMismatch }
+    public enum DecodeError: Error, Equatable, LocalizedError {
+        case invalid, api(String), noPoints
+        public var errorDescription: String? {
+            switch self {
+            case .invalid: return "応答を読めない"
+            case .api(let r): return "Open-Meteo: \(r)"
+            case .noPoints: return "地点が返らない"
+            }
+        }
+    }
 
-    /// 応答を格子にする。地点の並びは `pairs` と同じ（行優先）。陸の海況は null のまま
-    public static func decode(_ data: Data, latitudes: [Double], longitudes: [Double], fetchedAt: Date = .now) throws -> GridForecast {
-        let points: [PointResponse]
+    /// 1 地点分の解読結果（緯度経度は API が格子に寄せた値）
+    public struct DecodedPoint: Sendable {
+        public var latitude: Double
+        public var longitude: Double
+        public var times: [Date]
+        public var values: [GridForecast.Variable: [Double?]]
+    }
+
+    /// 応答（1 地点のオブジェクトか複数地点の配列）を地点ごとに解読する。エラー応答は投げる
+    public static func decodePoints(_ data: Data) throws -> [DecodedPoint] {
+        let raw: [PointResponse]
         if let list = try? JSONDecoder().decode([PointResponse].self, from: data) {
-            points = list
+            raw = list
         } else if let one = try? JSONDecoder().decode(PointResponse.self, from: data) {
             if one.error == true { throw DecodeError.api(one.reason ?? "unknown") }
-            points = [one]
+            raw = [one]
         } else {
             throw DecodeError.invalid
         }
-        let rows = latitudes.count, cols = longitudes.count
-        guard points.count == rows * cols else { throw DecodeError.countMismatch }
-        guard let timeArr = points.first(where: { $0.hourly?["time"] != nil })?.hourly?["time"]?.array else { throw DecodeError.invalid }
-        let times = timeArr.compactMap { $0 }.map { Date(timeIntervalSince1970: $0) }
-        let tCount = times.count
-        var values: [GridForecast.Variable: [Double?]] = [:]
         let map = weatherMap.merging(marineMap) { a, _ in a }
-        for (p, point) in points.enumerated() {
-            let r = p / cols, c = p % cols
-            guard let hourly = point.hourly else { continue }
+        var out: [DecodedPoint] = []
+        for p in raw {
+            guard let lat = p.latitude, let lon = p.longitude, let hourly = p.hourly, let timeArr = hourly["time"]?.array else { continue }
+            let times = timeArr.compactMap { $0 }.map { Date(timeIntervalSince1970: $0) }
+            var values: [GridForecast.Variable: [Double?]] = [:]
             for (key, v) in map {
                 guard let arr = hourly[key]?.array else { continue }
+                values[v] = v == .currentSpeed ? arr.map { $0.map { $0 / 3.6 } } : arr // km/h → m/s
+            }
+            out.append(DecodedPoint(latitude: lat, longitude: lon, times: times, values: values))
+        }
+        return out
+    }
+
+    /// 地点を最も近い格子の升に置いて格子にする。API は座標を自分の格子に寄せて返すので、添字ではなく距離で対応させる。
+    /// 足りない升（陸・欠落）は nil のまま。時刻は最初の地点のもの
+    public static func assemble(points: [DecodedPoint], latitudes: [Double], longitudes: [Double], fetchedAt: Date = .now) throws -> GridForecast {
+        let rows = latitudes.count, cols = longitudes.count
+        guard rows > 0, cols > 0, let first = points.first(where: { !$0.times.isEmpty }) else { throw DecodeError.noPoints }
+        let times = first.times
+        let tCount = times.count
+        let dLat = rows > 1 ? (latitudes[rows - 1] - latitudes[0]) / Double(rows - 1) : 1
+        let dLon = cols > 1 ? (longitudes[cols - 1] - longitudes[0]) / Double(cols - 1) : 1
+        var values: [GridForecast.Variable: [Double?]] = [:]
+        var filled = Set<Int>()
+        for p in points {
+            let r = Int(((p.latitude - latitudes[0]) / dLat).rounded()), c = Int(((p.longitude - longitudes[0]) / dLon).rounded())
+            guard (0..<rows).contains(r), (0..<cols).contains(c) else { continue }
+            let cell = r * cols + c
+            // 同じ升に複数来たら近い方（先着で十分）
+            guard !filled.contains(cell) else { continue }
+            filled.insert(cell)
+            for (v, arr) in p.values {
                 if values[v] == nil { values[v] = Array(repeating: nil, count: tCount * rows * cols) }
-                for t in 0..<min(tCount, arr.count) {
-                    var val = arr[t]
-                    if v == .currentSpeed, let x = val { val = x / 3.6 } // km/h → m/s
-                    values[v]![t * rows * cols + r * cols + c] = val
-                }
+                for t in 0..<min(tCount, arr.count) { values[v]![t * rows * cols + cell] = arr[t] }
             }
         }
         return GridForecast(latitudes: latitudes, longitudes: longitudes, times: times, values: values, fetchedAt: fetchedAt)
+    }
+
+    /// 1 回の応答を格子にする（複数回に分けて取ったときは `decodePoints` と `assemble` を使う）
+    public static func decode(_ data: Data, latitudes: [Double], longitudes: [Double], fetchedAt: Date = .now) throws -> GridForecast {
+        try assemble(points: try decodePoints(data), latitudes: latitudes, longitudes: longitudes, fetchedAt: fetchedAt)
+    }
+
+    /// 地点の組を `size` ずつに分けた URL（API の地点数の上限と URL 長を避ける）
+    public static func chunkedURLs(marine: Bool, latitudes: [Double], longitudes: [Double], forecastDays: Int = 3, size: Int = 50) -> [URL] {
+        var pairs: [(Double, Double)] = []
+        for lat in latitudes { for lon in longitudes { pairs.append((lat, lon)) } }
+        return stride(from: 0, to: pairs.count, by: max(1, size)).map { start in
+            let chunk = Array(pairs[start..<min(pairs.count, start + size)])
+            let la = chunk.map { String(format: "%.2f", $0.0) }.joined(separator: ","), lo = chunk.map { String(format: "%.2f", $0.1) }.joined(separator: ",")
+            var comps = URLComponents(string: marine ? "https://marine-api.open-meteo.com/v1/marine" : "https://api.open-meteo.com/v1/forecast")!
+            var items = [URLQueryItem(name: "latitude", value: la), URLQueryItem(name: "longitude", value: lo),
+                         URLQueryItem(name: "hourly", value: (marine ? marineFields : weatherFields).joined(separator: ","))]
+            if !marine { items.append(URLQueryItem(name: "wind_speed_unit", value: "ms")) }
+            items += [URLQueryItem(name: "forecast_days", value: String(forecastDays)), URLQueryItem(name: "timeformat", value: "unixtime"), URLQueryItem(name: "timezone", value: "UTC")]
+            comps.queryItems = items
+            return comps.url!
+        }
     }
 }

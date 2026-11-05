@@ -85,9 +85,39 @@ final class GridForecastTests: XCTestCase {
         XCTAssertEqual(g.value(.visibility, timeIndex: 1, row: 0, col: 0), 800)
         XCTAssertNil(g.value(.cape, timeIndex: 0, row: 0, col: 1))
         XCTAssertEqual(g.range(of: .windSpeed), 2...5)
-        XCTAssertThrowsError(try OpenMeteoGrid.decode(Data(json.utf8), latitudes: [41.0, 42.0], longitudes: [140.0, 141.0]))
+        // 地点が足りなくても（陸で欠落）、ある升だけ埋まる
+        let partial = try OpenMeteoGrid.decode(Data(json.utf8), latitudes: [41.0, 42.0], longitudes: [140.0, 141.0])
+        XCTAssertEqual(partial.value(.windSpeed, timeIndex: 0, row: 0, col: 1), 4)
+        XCTAssertNil(partial.value(.windSpeed, timeIndex: 0, row: 1, col: 0))
         XCTAssertThrowsError(try OpenMeteoGrid.decode(Data("{\"error\":true,\"reason\":\"bad\"}".utf8), latitudes: [41.0], longitudes: [140.0]))
+        XCTAssertThrowsError(try OpenMeteoGrid.decode(Data("[]".utf8), latitudes: [41.0], longitudes: [140.0]))
         let rt = try FogJSON.decode(GridForecast.self, from: try FogJSON.encode(g))
         XCTAssertEqual(rt, g)
+    }
+
+    func testAssembleSnapsToNearestCell() throws {
+        // API が格子に寄せた座標（41.02, 140.98）を返しても、最も近い升（41.0, 141.0）に入る
+        let json = """
+        [{"latitude":41.02,"longitude":140.98,"hourly":{"time":[1762300800],"temperature_2m":[7.5]}},
+         {"latitude":41.98,"longitude":140.03,"hourly":{"time":[1762300800],"temperature_2m":[3.0]}}]
+        """
+        let pts = try OpenMeteoGrid.decodePoints(Data(json.utf8))
+        XCTAssertEqual(pts.count, 2)
+        let g = try OpenMeteoGrid.assemble(points: pts, latitudes: [41.0, 42.0], longitudes: [140.0, 141.0], fetchedAt: t0)
+        XCTAssertEqual(g.value(.airTemperature, timeIndex: 0, row: 0, col: 1), 7.5)
+        XCTAssertEqual(g.value(.airTemperature, timeIndex: 0, row: 1, col: 0), 3.0)
+        XCTAssertNil(g.value(.airTemperature, timeIndex: 0, row: 0, col: 0))
+    }
+
+    func testChunkedURLs() {
+        let urls = OpenMeteoGrid.chunkedURLs(marine: true, latitudes: [41.0, 42.0, 43.0], longitudes: [140.0, 141.0, 142.0, 143.0], size: 5)
+        XCTAssertEqual(urls.count, 3) // 12 地点 → 5, 5, 2
+        XCTAssertTrue(urls[0].absoluteString.contains("latitude=41.00,41.00,41.00,41.00,42.00"), urls[0].absoluteString)
+        XCTAssertTrue(urls[2].absoluteString.contains("latitude=43.00,43.00&"), urls[2].absoluteString)
+        XCTAssertTrue(urls[0].absoluteString.hasPrefix("https://marine-api.open-meteo.com"))
+        XCTAssertFalse(urls[0].absoluteString.contains("wind_speed_unit"))
+        let w = OpenMeteoGrid.chunkedURLs(marine: false, latitudes: [41.0], longitudes: [140.0])
+        XCTAssertEqual(w.count, 1)
+        XCTAssertTrue(w[0].absoluteString.contains("wind_speed_unit=ms"))
     }
 }
