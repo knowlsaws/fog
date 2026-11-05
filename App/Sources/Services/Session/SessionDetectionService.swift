@@ -133,6 +133,7 @@ final class SessionDetectionService {
         location.startTracking()
         scheduler.start(session: session, coordinate: anchor)
         SessionNotifications.sessionStarted(spotName: spot.name, sessionID: session.id)
+        SafetyNotifier.schedule(at: at, coordinate: anchor, environment: environment)
         Self.log.info("session started at \(spot.name, privacy: .public)")
     }
 
@@ -148,6 +149,7 @@ final class SessionDetectionService {
         location.startTracking()
         WidgetSync.setRecording(true)
         scheduler.start(session: session, coordinate: anchor)
+        SafetyNotifier.schedule(at: at, coordinate: anchor, environment: environment)
         Self.log.info("session resumed (run and gun)")
     }
 
@@ -159,6 +161,7 @@ final class SessionDetectionService {
         try? store.upsert(session)
         onSessionEnded?(id)
         scheduler.stop()
+        SafetyNotifier.cancel()
         location.startMonitoring()
         lastEndedSessionID = id
         activeSessionID = nil
@@ -191,6 +194,7 @@ final class SessionDetectionService {
     func discard(sessionID: UUID) {
         if activeSessionID == sessionID {
             scheduler.stop()
+            SafetyNotifier.cancel()
             location.startMonitoring()
             activeSessionID = nil
             detector.reset()

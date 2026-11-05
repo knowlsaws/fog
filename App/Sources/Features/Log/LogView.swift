@@ -11,7 +11,7 @@ struct LogView: View {
     @State private var reportSession: Core.Session?
     @State private var deleting: Core.Session?
 
-    enum AnalysisKind: String, Identifiable { case hour, tide, spot; var id: String { rawValue } }
+    enum AnalysisKind: String, Identifiable { case hour, tide, spot, map; var id: String { rawValue } }
 
     var body: some View {
         GeometryReader { geo in
@@ -151,6 +151,14 @@ struct LogView: View {
                     }
                     .chartXAxis { AxisMarks { _ in AxisValueLabel().font(.system(size: 8)).foregroundStyle(DS.Color.textTertiary) } }
                     .chartYAxis(.hidden)
+                }
+                // 地図（F-32）：全釣果のヒートマップ
+                analysisCard(.map, title: "地図", number: "\(model.catchCount)", sub: "釣れた場所の濃さ") {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous).fill(DS.Color.surface)
+                        Image(systemName: "map.fill").font(.system(size: 28)).foregroundStyle(DS.Color.accent.opacity(0.8))
+                    }
+                    .frame(height: 100)
                 }
             }
         }

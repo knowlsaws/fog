@@ -53,6 +53,8 @@ final class CaptureService {
             env: environment.snapshot(at: date, coordinate: location),
             pointID: detection.currentPointID(), speciesCandidates: candidates, tackleID: session.tackleID
         )
+        // 背景のタグ（足場・時間帯・天気。F-31）
+        item.sceneTags = await SceneClassifier.tags(for: image)
         // 写真をライブラリへ（失敗しても釣果は残す）
         if let identifier = try? await library.save(jpeg: jpeg, at: date, coordinate: coordinate) {
             item.photoLocalIdentifier = identifier
@@ -65,13 +67,14 @@ final class CaptureService {
     func recordImported(image: CGImage, photoIdentifier: String, at date: Date, coordinate: Coordinate?, session: Core.Session) async -> Outcome? {
         let candidates = await classifier.classify(image)
         let location = coordinate ?? (try? store.spot(id: session.spotID))?.coordinate ?? Coordinate(latitude: 0, longitude: 0)
-        let item = Catch(
+        var item = Catch(
             sessionID: session.id, at: date, coordinate: location,
             species: candidates.first?.species ?? "", speciesConfidence: candidates.first?.confidence ?? 0,
             photoLocalIdentifier: photoIdentifier, tackle: session.tackle, rigID: session.rigID,
             env: environment.snapshot(at: date, coordinate: location),
             speciesCandidates: candidates, photoLocalIdentifiers: [photoIdentifier], tackleID: session.tackleID
         )
+        item.sceneTags = await SceneClassifier.tags(for: image)
         return persist(item, in: session, thumbnail: PhotoLibraryService.thumbnailJPEG(from: image))
     }
 

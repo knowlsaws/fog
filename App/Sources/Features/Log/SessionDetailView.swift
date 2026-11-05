@@ -10,6 +10,9 @@ struct SessionDetailView: View {
     @Environment(AppServices.self) private var services
     @State private var deleting: Catch?
     @State private var removedIDs: Set<UUID> = []
+    /// 答え合わせ（F-29）：釣行の時間範囲の釣れ率の推移と評価
+    @State private var reviewPoints: [ScorePoint] = []
+    @State private var review: SessionReview.Result?
 
     var body: some View {
         ScrollView {
@@ -24,13 +27,106 @@ struct SessionDetailView: View {
                     Text(r.summary).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
                     Text(r.body).font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
                 }
+                reviewChart
                 timeline
+                pressure
                 track
                 catches
             }
             .padding(DS.Spacing.l)
         }
         .background(DS.Color.background)
+        .task { computeReview() }
+    }
+
+    /// 答え合わせ（F-29）：釣れ率の推移（緑）に釣れた瞬間の点を重ね、当たっていたかを 1 行で
+    private var reviewChart: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("答え合わせ").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                Spacer()
+                if let r = review {
+                    Text(r.verdict).font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
+                }
+            }
+            if reviewPoints.isEmpty {
+                Text("推移を計算中").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            } else {
+                Chart {
+                    RectangleMark(xStart: .value("s", session.startedAt), xEnd: .value("e", session.endedAt ?? Date()), yStart: .value("y0", 0), yEnd: .value("y1", 100))
+                        .foregroundStyle(Color.white.opacity(0.05))
+                    ForEach(reviewPoints, id: \.at) { p in
+                        LineMark(x: .value("時刻", p.at), y: .value("釣れ率", p.score)).foregroundStyle(DS.Color.accent).interpolationMethod(.monotone)
+                    }
+                    if let r = review {
+                        ForEach(Array(r.catchScores.enumerated()), id: \.offset) { _, c in
+                            PointMark(x: .value("釣果", c.0), y: .value("釣れ率", c.1)).foregroundStyle(Color.white).symbolSize(40)
+                        }
+                    }
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxis { AxisMarks(position: .leading, values: [0, 50, 100]) { _ in AxisValueLabel().font(.system(size: 9)).foregroundStyle(DS.Color.accent) } }
+                .chartXAxis { AxisMarks(values: .stride(by: .hour)) { _ in AxisValueLabel(format: .dateTime.hour()).font(.system(size: 9)).foregroundStyle(DS.Color.textTertiary) } }
+                .frame(height: 110)
+                if let r = review {
+                    Text("釣行中の平均 \(Int(r.meanScore.rounded()))" + (r.meanScoreAtCatch.map { " · 釣れた時 \(Int($0.rounded()))" } ?? "") + (r.hitRate.map { " · 60 以上で釣れた割合 \(Int(($0 * 100).rounded()))%" } ?? ""))
+                        .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                }
+            }
+        }
+    }
+
+    /// 釣行の時間範囲の推移を計算する。気象は予報キャッシュか、無ければ釣行中に保存したスナップショットから
+    private func computeReview() {
+        let env = services.environment
+        let coordinate = (try? services.store.spot(id: session.spotID))?.coordinate ?? session.snapshots.first?.coordinate ?? session.catches.first?.coordinate
+        guard let coordinate, coordinate.isPlausible else { return }
+        let end = session.endedAt ?? Date()
+        let from = session.startedAt.addingTimeInterval(-3600), to = end.addingTimeInterval(3600)
+        var inputs = env.inputs(for: coordinate)
+        if !inputs.weather.contains(where: { $0.at >= from && $0.at <= to }) {
+            inputs.weather = session.snapshots.map { e in
+                WeatherSample(at: e.at, airTemperatureC: e.airTemperatureC, humidity: e.humidity, conditionCode: e.conditionCode, windSpeedMS: e.windSpeedMS,
+                              windGustMS: e.windGustMS, windDirectionDeg: e.windDirectionDeg, pressureHPa: e.pressureHPa, cloudCover: e.cloudCover,
+                              precipitationMM: e.precipitationMM, visibilityM: e.visibilityM, isForecast: e.isForecast)
+            }
+        }
+        let sessions = (try? services.store.sessions()) ?? []
+        let spots = (try? services.store.spots()) ?? []
+        let personal = PersonalModel.learn(from: sessions.filter { !$0.isActive && $0.id != session.id }, coordinateOf: { s in spots.first { $0.id == s.spotID }?.coordinate })
+        let engine = ScoreEngine(personal: personal.total.hours >= 1 ? personal : nil)
+        let tide = env.tideStation(near: coordinate).map { TideEngine(station: $0) }
+        let extremes = tide?.extremes(from: from.addingTimeInterval(-6 * 3600), to: to.addingTimeInterval(6 * 3600)) ?? []
+        let builder = env.builder(for: coordinate)
+        let tz = TimeZone(identifier: "Asia/Tokyo") ?? .current
+        reviewPoints = ScoreTimeline.compute(engine: engine, coordinate: coordinate, from: from, to: to, stepMinutes: 15, timeZone: tz) { t in
+            builder.build(at: t, coordinate: coordinate, inputs: inputs, tide: tide, extremes: extremes)
+        }
+        review = SessionReview.evaluate(points: reviewPoints, catchTimes: session.catches.map(\.at), from: session.startedAt, to: end)
+    }
+
+    /// 現場の気圧（F-35）：釣行中に端末の気圧計で 5 分ごとに記録した値
+    private var pressure: some View {
+        Group {
+            if let log = session.pressureLog, log.count >= 2, let first = log.first, let last = log.last {
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("現場の気圧").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                        Spacer()
+                        let trend = PressureTrend.threeHourChange(log, now: last.at)
+                        Text(String(format: "%.0f → %.0f hPa", first.pressureHPa, last.pressureHPa) + (trend.map { String(format: "（3h %+.1f）", $0) } ?? ""))
+                            .font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
+                    }
+                    Chart(log, id: \.at) { p in
+                        LineMark(x: .value("時刻", p.at), y: .value("hPa", p.pressureHPa)).foregroundStyle(Color.white.opacity(0.8))
+                    }
+                    .chartYScale(domain: (log.map(\.pressureHPa).min()! - 1)...(log.map(\.pressureHPa).max()! + 1))
+                    .chartYAxis { AxisMarks(position: .leading) { _ in AxisValueLabel().font(.system(size: 9)).foregroundStyle(DS.Color.textTertiary) } }
+                    .chartXAxis { AxisMarks(values: .stride(by: .hour)) { _ in AxisValueLabel(format: .dateTime.hour()).font(.system(size: 9)).foregroundStyle(DS.Color.textTertiary) } }
+                    .frame(height: 70)
+                }
+            }
+        }
     }
 
     /// 条件の推移（潮位・風・気圧）と釣れた時刻
@@ -92,6 +188,10 @@ struct SessionDetailView: View {
                                     .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
                             }
                         }
+                        // 写真から推定した足場・時間帯・天気（F-31）
+                        if let tags = c.sceneTags, !tags.isEmpty {
+                            Text(tags.joined(separator: " · ")).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                        }
                     }
                     Spacer()
                 }
@@ -143,6 +243,8 @@ struct AnalysisDetailView: View {
                     let rigs = Analytics.rigStats(sessions: sessions)
                     bars("リグ別 釣果", rigs.map { ($0.rigID?.uuidString.prefix(4).description ?? "未設定", Double($0.catches)) }, labelsEvery: 1)
                     bars("リグ別 ロスト", rigs.map { ($0.rigID?.uuidString.prefix(4).description ?? "未設定", Double($0.hookLosses)) }, labelsEvery: 1)
+                case .map:
+                    CatchMapView(catches: catches, spots: spots)
                 }
             }
             .padding(DS.Spacing.l)
@@ -168,6 +270,58 @@ struct AnalysisDetailView: View {
             .chartYAxis(.hidden)
             .chartXAxis { AxisMarks { v in if v.index % labelsEvery == 0 { AxisValueLabel().font(.system(size: 9)).foregroundStyle(DS.Color.textTertiary) } } }
             .frame(height: 100)
+        }
+    }
+}
+
+/// 釣果の地図（F-32）：全釣り場の釣果を 30 m メッシュで集計し、尾数の多い場所ほど濃い円で示す。魚種の絞り込みは上のチップ。
+struct CatchMapView: View {
+    let catches: [Catch]
+    let spots: [UUID: Spot]
+
+    private struct Cell: Identifiable { let key: String; let center: Coordinate; let count: Int; var id: String { key } }
+
+    private var cells: [Cell] {
+        var counts: [String: (Coordinate, Int)] = [:]
+        for c in catches where c.coordinate.isPlausible {
+            let key = Mesh.key(for: c.coordinate)
+            let v = counts[key] ?? (Mesh.center(for: c.coordinate), 0)
+            counts[key] = (v.0, v.1 + 1)
+        }
+        return counts.map { Cell(key: $0.key, center: $0.value.0, count: $0.value.1) }
+    }
+
+    private var region: MKCoordinateRegion {
+        let coords = catches.map(\.coordinate).filter(\.isPlausible)
+        guard let minLat = coords.map(\.latitude).min(), let maxLat = coords.map(\.latitude).max(),
+              let minLon = coords.map(\.longitude).min(), let maxLon = coords.map(\.longitude).max() else {
+            return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 41.77, longitude: 140.73), latitudinalMeters: 20_000, longitudinalMeters: 20_000)
+        }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let span = MKCoordinateSpan(latitudeDelta: max(0.01, (maxLat - minLat) * 1.4), longitudeDelta: max(0.01, (maxLon - minLon) * 1.4))
+        return MKCoordinateRegion(center: center, span: span)
+    }
+
+    var body: some View {
+        let list = cells
+        let maxCount = max(1, list.map(\.count).max() ?? 1)
+        return VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            Text("\(catches.count) 尾 · \(list.count) か所").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            Map(initialPosition: .region(region), interactionModes: [.pan, .zoom]) {
+                ForEach(list) { cell in
+                    MapCircle(center: cell.center.cl, radius: 25)
+                        .foregroundStyle(DS.Color.accent.opacity(0.25 + 0.65 * Double(cell.count) / Double(maxCount)))
+                }
+                ForEach(Array(spots.values).filter { $0.isRegistered && $0.coordinate.isPlausible }) { spot in
+                    Annotation(spot.name, coordinate: spot.coordinate.cl) {
+                        Circle().fill(Color.white).frame(width: 6, height: 6)
+                    }
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+            .saturation(0)
+            .frame(height: 460)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         }
     }
 }

@@ -273,6 +273,7 @@ struct ForecastChart: View {
     private let hours = Array(stride(from: 0, to: 24, by: 3))
 
     @State private var tapped: Date?
+    @State private var showYear = false
 
     var body: some View {
         GeometryReader { geo in
@@ -308,6 +309,13 @@ struct ForecastChart: View {
             .sheet(item: Binding(get: { tapped.map { TappedTime(date: $0) } }, set: { tapped = $0?.date })) { t in
                 DayDetailSheet(model: model, at: t.date, twilights: twilightBands.map { ($0.label, $0.start, $0.end) }).presentationDetents([.large])
             }
+            .sheet(isPresented: $showYear) {
+                YearCalendarSheet(model: model) { date in
+                    showYear = false
+                    model.show(date: date)
+                }
+                .presentationDetents([.large])
+            }
         }
     }
 
@@ -336,10 +344,14 @@ struct ForecastChart: View {
             Button { step(-1) } label: { Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).foregroundStyle(model.dayOffset > model.dayOffsetRange.lowerBound ? DS.Color.textSecondary : DS.Color.faded).frame(width: 28, height: 22) }
                 .buttonStyle(.plain)
             Spacer()
-            HStack(spacing: 6) {
-                Text(Self.dayLabel(model.dayStart, timeZone: model.timeZone)).font(DS.Font.number(14)).foregroundStyle(DS.Color.textPrimary)
-                Text(model.dayOffset == 0 ? "今日" : (model.dayOffset == 1 ? "明日" : (model.dayOffset == -1 ? "昨日" : ""))).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            // 日付をタップすると年間カレンダー（F-33）
+            Button { showYear = true } label: {
+                HStack(spacing: 6) {
+                    Text(Self.dayLabel(model.dayStart, timeZone: model.timeZone)).font(DS.Font.number(14)).foregroundStyle(DS.Color.textPrimary)
+                    Text(model.dayOffset == 0 ? "今日" : (model.dayOffset == 1 ? "明日" : (model.dayOffset == -1 ? "昨日" : ""))).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                }
             }
+            .buttonStyle(.plain)
             Spacer()
             Button { step(+1) } label: { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(model.dayOffset < model.dayOffsetRange.upperBound ? DS.Color.textSecondary : DS.Color.faded).frame(width: 28, height: 22) }
                 .buttonStyle(.plain)

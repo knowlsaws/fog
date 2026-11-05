@@ -11,6 +11,7 @@ struct SpotsView: View {
     @State private var detail: SpotsViewModel.Card?
     @State private var searchText = ""
     @State private var showSearch = false
+    @State private var showCompare = false
     /// 表示範囲の緯度幅（度）。狭いほど拡大している
     @State private var latitudeSpan: Double = 0.1
 
@@ -22,6 +23,7 @@ struct SpotsView: View {
                     Spacer()
                     VStack(spacing: DS.Spacing.s) {
                         roundButton("magnifyingglass") { showSearch = true }
+                        roundButton("list.number") { showCompare = true }
                         roundButton("location.fill") { if let c = model.currentLocation { camera = .region(MKCoordinateRegion(center: c.cl, latitudinalMeters: 3000, longitudinalMeters: 3000)) } }
                     }
                     .padding(DS.Spacing.l)
@@ -46,6 +48,7 @@ struct SpotsView: View {
             if let id, let c = model.allCards.first(where: { $0.spot.id == id }), c.spot.coordinate.isPlausible { withAnimation { camera = .region(region(for: c.spot.coordinate)) } }
         }
         .sheet(item: $detail) { SpotDetailView(card: $0).onDisappear { model.refresh() } }
+        .sheet(isPresented: $showCompare) { SpotCompareSheet(model: model).presentationDetents([.large]) }
         .sheet(isPresented: $showSearch) { SpotSearchSheet { item in
             showSearch = false
             camera = .region(MKCoordinateRegion(center: item.placemark.coordinate, latitudinalMeters: 3000, longitudinalMeters: 3000))
@@ -269,5 +272,75 @@ struct SpotMarker: View {
 
     private var dotSize: CGFloat {
         card.isCandidate ? 10 : 14 + CGFloat(min(12, card.stats.sessions)) * 1.6
+    }
+}
+
+/// 釣り場の比較（F-30）：登録した釣り場を、選んだ日の最高釣れ率の順に並べる。日は矢印で送る（今日から 2 週間）。
+/// 行をタップするとホームの釣り場にする
+struct SpotCompareSheet: View {
+    let model: SpotsViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var dayOffset = 0
+    @State private var rows: [SpotsViewModel.CompareRow] = []
+    @State private var loading = false
+    private let tz = TimeZone(identifier: "Asia/Tokyo") ?? .current
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.m) {
+            HStack {
+                Button { if dayOffset > 0 { dayOffset -= 1 } } label: { Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).foregroundStyle(dayOffset > 0 ? DS.Color.textSecondary : DS.Color.faded).frame(width: 28, height: 22) }.buttonStyle(.plain)
+                Spacer()
+                HStack(spacing: 6) {
+                    Text(ForecastChart.dayLabel(day, timeZone: tz)).font(DS.Font.number(16)).foregroundStyle(DS.Color.textPrimary)
+                    Text(dayOffset == 0 ? "今日" : (dayOffset == 1 ? "明日" : "")).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                }
+                Spacer()
+                Button { if dayOffset < 13 { dayOffset += 1 } } label: { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(dayOffset < 13 ? DS.Color.textSecondary : DS.Color.faded).frame(width: 28, height: 22) }.buttonStyle(.plain)
+            }
+            if rows.isEmpty {
+                Text(loading ? "計算中" : "登録した釣り場がありません").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            }
+            VStack(spacing: DS.Spacing.s) {
+                ForEach(rows) { r in
+                    Button { model.selectForHome(r.spot); dismiss() } label: { row(r) }.buttonStyle(.plain)
+                }
+            }
+            Spacer()
+            Text("タップでホームの釣り場にする · 予報の先は潮と光だけで計算").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+        }
+        .padding(DS.Spacing.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(DS.Color.background)
+        .task(id: dayOffset) {
+            loading = true
+            rows = await model.compare(dayOffset: dayOffset)
+            loading = false
+        }
+    }
+
+    private var day: Date {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
+        return cal.startOfDay(for: Date()).addingTimeInterval(Double(dayOffset) * 86_400)
+    }
+
+    private func row(_ r: SpotsViewModel.CompareRow) -> some View {
+        HStack(spacing: DS.Spacing.m) {
+            Text("\(r.maxScore)").font(DS.Font.score(28)).foregroundStyle(r.maxScore >= 70 ? DS.Color.accent : DS.Color.textPrimary).frame(width: 52, alignment: .trailing)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(r.spot.name).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
+                HStack(spacing: DS.Spacing.s) {
+                    if let s = r.windowStart, let e = r.windowEnd {
+                        Text("\(HomeViewModel.clock(s, timeZone: tz))〜\(HomeViewModel.clock(e, timeZone: tz))").font(DS.Font.number(12)).foregroundStyle(DS.Color.sun)
+                    }
+                    if let d = r.distanceM {
+                        Text(d >= 1000 ? String(format: "%.0f km", d / 1000) : "\(Int(d)) m").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                    }
+                }
+            }
+            Spacer()
+            Image(systemName: r.conditionCode.map { HomeViewModel.weatherSymbol($0) } ?? "minus").font(.system(size: 16)).foregroundStyle(DS.Color.textSecondary)
+        }
+        .padding(DS.Spacing.m)
+        .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
     }
 }

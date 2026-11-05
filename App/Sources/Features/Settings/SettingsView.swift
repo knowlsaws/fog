@@ -369,27 +369,61 @@ private struct ShareSheet: UIViewControllerRepresentable {
 
 struct NotificationSettingsView: View {
     @State private var enabled: [NotificationSettings.Kind: Bool] = [:]
+    @State private var weekendOnly = NotificationSettings.briefWeekendOnly
+    @State private var registeredOnly = NotificationSettings.briefRegisteredOnly
+    @State private var homeTimeOn = NotificationSettings.homeTimeMinutes != nil
+    @State private var homeTime = Date()
 
     var body: some View {
         SettingsPage(title: "通知") {
             List {
-                ForEach(NotificationSettings.Kind.allCases) { kind in
-                    Toggle(isOn: Binding(
-                        get: { enabled[kind] ?? NotificationSettings.isEnabled(kind) },
-                        set: { enabled[kind] = $0; NotificationSettings.setEnabled($0, for: kind) }
-                    )) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(kind.title).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
-                            Text(kind.detail).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                Section {
+                    ForEach(NotificationSettings.Kind.allCases) { kind in
+                        Toggle(isOn: Binding(
+                            get: { enabled[kind] ?? NotificationSettings.isEnabled(kind) },
+                            set: { enabled[kind] = $0; NotificationSettings.setEnabled($0, for: kind) }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(kind.title).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                                Text(kind.detail).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                            }
                         }
+                        .tint(DS.Color.accent)
+                        .settingsRow()
                     }
-                    .tint(DS.Color.accent)
-                    .settingsRow()
                 }
+                Section {
+                    Toggle(isOn: $weekendOnly) { Text("週末（土日祝）の前夜だけ").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary) }
+                        .tint(DS.Color.accent).settingsRow()
+                        .onChange(of: weekendOnly) { _, v in NotificationSettings.briefWeekendOnly = v }
+                    Toggle(isOn: $registeredOnly) { Text("登録した釣り場を見ているときだけ").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary) }
+                        .tint(DS.Color.accent).settingsRow()
+                        .onChange(of: registeredOnly) { _, v in NotificationSettings.briefRegisteredOnly = v }
+                } header: { SectionLabel(text: "明日のベストタイムの条件") }
+                Section {
+                    Toggle(isOn: $homeTimeOn) { Text("帰る時間を知らせる").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary) }
+                        .tint(DS.Color.accent).settingsRow()
+                        .onChange(of: homeTimeOn) { _, on in NotificationSettings.homeTimeMinutes = on ? minutes(of: homeTime) : nil }
+                    if homeTimeOn {
+                        DatePicker("帰る時間", selection: $homeTime, displayedComponents: .hourAndMinute)
+                            .font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).tint(DS.Color.accent).settingsRow()
+                            .onChange(of: homeTime) { _, d in NotificationSettings.homeTimeMinutes = minutes(of: d) }
+                    }
+                    Text("釣行中だけ鳴ります。日の入り 30 分前と満潮 1 時間前は自動").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                } header: { SectionLabel(text: "安全") }
             }
             .listStyle(.plain)
         }
+        .onAppear {
+            if let m = NotificationSettings.homeTimeMinutes, let d = Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) { homeTime = d }
+            else if let d = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date()) { homeTime = d }
+        }
         .task { await SessionNotifications.requestAuthorization() }
+    }
+
+    private func minutes(of date: Date) -> Int {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (c.hour ?? 0) * 60 + (c.minute ?? 0)
     }
 }
 

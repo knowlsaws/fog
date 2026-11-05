@@ -35,6 +35,8 @@ public struct Catch: Codable, Identifiable, Hashable, Sendable {
     public var env: EnvSnapshot?
     /// 既定はリリース（§4）。
     public var released: Bool
+    /// 写真の背景から推定した足場・時間帯・天気（F-31）。古いデータは nil
+    public var sceneTags: [String]?
 
     public init(
         id: UUID = UUID(),
@@ -54,7 +56,8 @@ public struct Catch: Codable, Identifiable, Hashable, Sendable {
         speciesCandidates: [SpeciesCandidate] = [],
         speciesCorrected: Bool = false,
         photoLocalIdentifiers: [String] = [],
-        tackleID: UUID? = nil
+        tackleID: UUID? = nil,
+        sceneTags: [String]? = nil
     ) {
         self.id = id
         self.sessionID = sessionID
@@ -74,6 +77,7 @@ public struct Catch: Codable, Identifiable, Hashable, Sendable {
         self.rigID = rigID
         self.env = env
         self.released = released
+        self.sceneTags = sceneTags
     }
 
     public var isSizeMeasured: Bool { lengthCm != nil }

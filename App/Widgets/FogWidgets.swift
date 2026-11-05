@@ -446,10 +446,70 @@ struct LockScoreWidget: Widget {
     }
 }
 
+// MARK: - ロック画面：潮位と次の満干（F-34）
+
+struct LockTideView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: ScoreEntry
+
+    private var level: String { entry.tideLevelCm.map { "\(Int($0.rounded()))" } ?? "—" }
+    private var arrow: String { entry.tideRising == nil ? "minus" : (entry.tideRising! ? "arrow.up" : "arrow.down") }
+    private var next: String {
+        guard let t = entry.nextTide else { return "" }
+        return (t.kind == "highTide" ? "満潮 " : "干潮 ") + MediumScoreView.hm(t.at)
+    }
+
+    var body: some View {
+        Group {
+            switch family {
+            case .accessoryCircular:
+                VStack(spacing: 0) {
+                    HStack(spacing: 1) {
+                        Text(level).font(.system(size: 18, weight: .bold, design: .rounded))
+                        Image(systemName: arrow).font(.system(size: 10, weight: .bold))
+                    }
+                    Text("cm").font(.system(size: 9, weight: .semibold))
+                }
+                .widgetAccentable()
+            case .accessoryInline:
+                Text("潮位 \(level)cm \(entry.tideRising == nil ? "" : (entry.tideRising! ? "↑" : "↓")) \(next)")
+            default:
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("潮位").font(.system(size: 11, weight: .medium)).opacity(0.7)
+                        HStack(spacing: 2) {
+                            Text("\(level)cm").font(.system(size: 22, weight: .bold, design: .rounded)).widgetAccentable()
+                            Image(systemName: arrow).font(.system(size: 12, weight: .bold))
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text("次").font(.system(size: 11, weight: .medium)).opacity(0.7)
+                        Text(next).font(.system(size: 15, weight: .semibold, design: .rounded))
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+        .containerBackground(for: .widget) { Color.clear }
+        .widgetURL(URL(string: "fog://home"))
+    }
+}
+
+struct LockTideWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "LockTideWidget", provider: ScoreProvider()) { LockTideView(entry: $0) }
+            .configurationDisplayName("潮（ロック画面）")
+            .description("今の潮位と次の満干")
+            .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
+    }
+}
+
 @main
 struct FogWidgets: WidgetBundle {
     var body: some Widget {
         ScoreWidget()
         LockScoreWidget()
+        LockTideWidget()
     }
 }

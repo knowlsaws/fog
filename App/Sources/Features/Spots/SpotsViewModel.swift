@@ -112,6 +112,52 @@ final class SpotsViewModel {
         catalogPorts = out
     }
 
+    // MARK: 釣り場の比較（F-30）
+
+    struct CompareRow: Identifiable {
+        let spot: Spot
+        let maxScore: Int
+        let windowStart: Date?
+        let windowEnd: Date?
+        let conditionCode: String?
+        let distanceM: Double?
+        var id: UUID { spot.id }
+    }
+
+    /// 登録した釣り場ごとに、その日（`dayOffset` 日後）の最高釣れ率と最良の時間帯を出す。釣れ率の高い順
+    func compare(dayOffset: Int) async -> [CompareRow] {
+        guard let services else { return [] }
+        let env = services.environment
+        let tz = TimeZone(identifier: "Asia/Tokyo") ?? .current
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
+        let now = Date()
+        let start = cal.startOfDay(for: now).addingTimeInterval(Double(dayOffset) * 86_400)
+        let end = start.addingTimeInterval(86_400)
+        let engine = scoreEngine()
+        let spots = ((try? services.store.spots()) ?? []).filter { $0.isRegistered && $0.coordinate.isPlausible }
+        var rows: [CompareRow] = []
+        for spot in spots.prefix(12) {
+            await env.refreshIfNeeded(at: spot.coordinate, now: now)
+            let tide = env.tideStation(near: spot.coordinate).map { TideEngine(station: $0) }
+            let extremes = tide?.extremes(from: start.addingTimeInterval(-6 * 3600), to: end.addingTimeInterval(6 * 3600)) ?? []
+            let builder = env.builder(for: spot.coordinate)
+            let inputs = env.inputs(for: spot.coordinate)
+            let horizon = env.forecastHorizon(for: spot.coordinate)
+            let points = ScoreTimeline.compute(engine: engine, coordinate: spot.coordinate, from: start, to: end, stepMinutes: 15, timeZone: tz) { t in
+                var e = builder.build(at: t, coordinate: spot.coordinate, inputs: inputs, tide: tide, extremes: extremes)
+                if let h = horizon, t > h { e.isForecast = true }
+                return e
+            }
+            let window = ScoreTimeline.bestWindow(points)
+            let noon = start.addingTimeInterval(12 * 3600)
+            let beyond = horizon.map { noon > $0 } ?? true
+            let cond = beyond ? nil : env.snapshot(at: noon, coordinate: spot.coordinate).conditionCode
+            rows.append(CompareRow(spot: spot, maxScore: window?.maxScore ?? (points.map(\.score).max() ?? 0), windowStart: window?.start, windowEnd: window?.end,
+                                   conditionCode: cond, distanceM: currentLocation.map { Geo.distanceMeters($0, spot.coordinate) }))
+        }
+        return rows.sorted { $0.maxScore > $1.maxScore }
+    }
+
     private func scoreEngine() -> ScoreEngine {
         guard let services else { return ScoreEngine() }
         let sessions = (try? services.store.sessions()) ?? []

@@ -10,6 +10,8 @@ enum SessionNotifications {
     static let discardAction = "fog.session.discard"
     static let recordCategory = "fog.record"
     static let peakCategory = "fog.peak"
+    static let briefCategory = "fog.brief"
+    static let safetyCategory = "fog.safety"
 
     static func registerCategories() {
         let stop = UNNotificationAction(identifier: stopAction, title: "停止", options: [.destructive])
@@ -73,5 +75,28 @@ enum SessionNotifications {
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
         post(id: "peak.\(dayKey)", category: peakCategory, title: spotName,
              body: "\(f.string(from: peakStart)) から釣れ率 \(score)", trigger: trigger, timeSensitive: false)
+    }
+
+    /// 明日のベストタイム（F-28）：今日の 20 時に 1 通。同じ日の予約は差し替える
+    static func dailyBrief(_ brief: DailyBriefPlanner.Brief, now: Date, dayKey: String) {
+        guard NotificationSettings.isEnabled(.dailyBrief) else { return }
+        let interval = max(1, brief.fireAt.timeIntervalSince(now))
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+        post(id: "brief.\(dayKey)", category: briefCategory, title: brief.title, body: brief.body, trigger: trigger, timeSensitive: false)
+    }
+
+    /// 安全通知（F-36）：種類ごとに ID を固定し、予約し直すと差し替わる
+    static func safety(_ alerts: [SafetyPlanner.Alert], now: Date) {
+        cancelSafety()
+        guard NotificationSettings.isEnabled(.safety) else { return }
+        for a in alerts {
+            let interval = max(1, a.fireAt.timeIntervalSince(now))
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+            post(id: "safety.\(a.kind.rawValue)", category: safetyCategory, title: a.title, body: a.body, trigger: trigger, timeSensitive: true)
+        }
+    }
+
+    static func cancelSafety() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: SafetyPlanner.Kind.allCases.map { "safety.\($0.rawValue)" })
     }
 }
