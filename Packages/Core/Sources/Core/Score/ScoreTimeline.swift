@@ -65,7 +65,6 @@ public enum ScoreTimeline {
         if let c = current { peaks.append(c) }
         return peaks
     }
-}
 
     /// 1 日の最良の時間帯：70 以上が続く区間のうち最高点のもの。無ければ最高点の前後 1 時間。
     public static func bestWindow(_ points: [ScorePoint]) -> Peak? {
