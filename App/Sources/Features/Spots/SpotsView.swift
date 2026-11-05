@@ -23,6 +23,9 @@ struct SpotsView: View {
     @State private var region: MKCoordinateRegion?
     @State private var showLayerSettings = false
     @State private var rasterTask: Task<Void, Never>?
+    /// 時刻ごとの色面（同じ層・同じ範囲・同じ版の間だけ有効）。時刻バーを戻しても即座に出る
+    @State private var rasterCache: [Int: FieldRaster] = [:]
+    @State private var rasterCacheKey = ""
     static let layerHours = 71
 
     var body: some View {
@@ -59,7 +62,7 @@ struct SpotsView: View {
             if !MapLayerSettings.isEnabled(layer), let first = MapLayerSettings.enabled.first { layer = first }
             rebuildRaster()
         }) { NavigationStack { MapLayerSettingsView() }.preferredColorScheme(.dark).tint(DS.Color.accent) }
-        .onChange(of: hourOffset) { _, _ in rebuildRaster() }
+        .onChange(of: hourOffset) { _, _ in rebuildRaster(throttle: true) }
         .onChange(of: services.gridForecast.version) { _, _ in rebuildRaster() }
         .onAppear {
             model.attach(services)
@@ -153,24 +156,37 @@ struct SpotsView: View {
                                      minLon: region.center.longitude - halfLon, maxLon: region.center.longitude + halfLon)
     }
 
-    /// 読み込み済みタイル全体（表示範囲の周り 1 周を含む）に対して色面と流れの格子を作る。裏で計算して差し替える
-    private func rebuildRaster() {
+    /// 読み込み済みタイル全体（表示範囲の周り 1 周を含む）に対して色面と流れの格子を作る。裏で計算して差し替える。
+    /// 時刻バーをドラッグ中は 80 ms 待ってから（連続で作らない）。作ったものは時刻ごとに取っておく
+    private func rebuildRaster(throttle: Bool = false) {
         guard layersOn, let region, let grid = services.gridForecast.mosaic(marine: layer.isMarine), !grid.isEmpty,
               let lat = grid.latitudeRange, let lon = grid.longitudeRange else { raster = nil; return }
         // 表示範囲の 3 倍までに絞る（遠くまで読み込んでいても画像が巨大にならないように）
         let half = region.span.latitudeDelta * 1.5, halfLon = region.span.longitudeDelta * 1.5
-        let box = GeoBox(minLat: max(lat.lowerBound, region.center.latitude - half), maxLat: min(lat.upperBound, region.center.latitude + half),
+        var box = GeoBox(minLat: max(lat.lowerBound, region.center.latitude - half), maxLat: min(lat.upperBound, region.center.latitude + half),
                          minLon: max(lon.lowerBound, region.center.longitude - halfLon), maxLon: min(lon.upperBound, region.center.longitude + halfLon))
+        // 表示が今の色面の中にあるなら、箱はそのまま（時刻だけ変える。キャッシュが効く）
+        if let r = raster, r.layer == layer, r.box.contains(region: region) { box = r.box }
         guard box.maxLat > box.minLat, box.maxLon > box.minLon else { raster = nil; return }
+        let key = "\(layer.rawValue)|\(services.gridForecast.version)|\(box.minLat),\(box.maxLat),\(box.minLon),\(box.maxLon)|\(MapLayerSettings.opacity)"
+        if key != rasterCacheKey { rasterCache = [:]; rasterCacheKey = key }
+        if let cached = rasterCache[hourOffset] { raster = cached; return }
         let time = layerStart.addingTimeInterval(Double(hourOffset) * 3600)
-        let l = layer, opacity = MapLayerSettings.opacity
-        // 画素数は 1° あたり 320（上限 800）
-        let width = min(800, max(120, Int((box.maxLon - box.minLon) * 320))), height = min(800, max(120, Int((box.maxLat - box.minLat) * 420)))
+        let l = layer, opacity = MapLayerSettings.opacity, hour = hourOffset
+        // 画素数は 1° あたり 200（上限 520）。描くときに滑らかに拡大される
+        let width = min(520, max(100, Int((box.maxLon - box.minLon) * 200))), height = min(520, max(100, Int((box.maxLat - box.minLat) * 260)))
         rasterTask?.cancel()
+        let b = box
         rasterTask = Task.detached(priority: .userInitiated) {
-            let r = FieldRaster.build(grid: grid, layer: l, time: time, box: box, opacity: opacity, width: width, height: height)
+            if throttle { try? await Task.sleep(nanoseconds: 80_000_000) }
             guard !Task.isCancelled else { return }
-            await MainActor.run { raster = r }
+            let r = FieldRaster.build(grid: grid, layer: l, time: time, box: b, opacity: opacity, width: width, height: height)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                raster = r
+                if rasterCache.count > 24 { rasterCache = [:] }
+                rasterCache[hour] = r
+            }
         }
     }
 

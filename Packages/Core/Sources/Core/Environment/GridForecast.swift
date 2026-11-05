@@ -114,4 +114,82 @@ public struct GridForecast: Codable, Hashable, Sendable {
         guard let lo = vals.min(), let hi = vals.max() else { return nil }
         return lo...(hi > lo ? hi : lo + 1)
     }
+
+    /// 1 変数・1 時刻の切り出し（配列を先に取り出しておくので、画像を作るときの何十万回の参照が速い）
+    public struct Slice: Sendable {
+        let rows: Int, cols: Int
+        let minLat: Double, maxLat: Double, minLon: Double, maxLon: Double
+        let a: [Double?]
+        let b: [Double?]?
+        let frac: Double
+        let isDirection: Bool
+
+        @inline(__always) private func at(_ arr: [Double?], _ r: Int, _ c: Int) -> Double? { arr[r * cols + c] }
+
+        /// スカラー：双一次（nil の隅は外す）＋時刻の線形補間
+        public func sample(at c: Coordinate) -> Double? {
+            guard rows >= 2, cols >= 2, c.latitude >= minLat, c.latitude <= maxLat, c.longitude >= minLon, c.longitude <= maxLon else { return nil }
+            let r = (c.latitude - minLat) / (maxLat - minLat) * Double(rows - 1)
+            let cc = (c.longitude - minLon) / (maxLon - minLon) * Double(cols - 1)
+            let ri = min(rows - 2, Int(r)), ci = min(cols - 2, Int(cc))
+            let fr = r - Double(ri), fc = cc - Double(ci)
+            let w00 = (1 - fr) * (1 - fc), w01 = (1 - fr) * fc, w10 = fr * (1 - fc), w11 = fr * fc
+            if isDirection { return sampleDirection(ri, ci, w00, w01, w10, w11) }
+            func spatial(_ arr: [Double?]) -> Double? {
+                var sum = 0.0, w = 0.0
+                if let v = at(arr, ri, ci) { sum += v * w00; w += w00 }
+                if let v = at(arr, ri, ci + 1) { sum += v * w01; w += w01 }
+                if let v = at(arr, ri + 1, ci) { sum += v * w10; w += w10 }
+                if let v = at(arr, ri + 1, ci + 1) { sum += v * w11; w += w11 }
+                return w > 0.001 ? sum / w : nil
+            }
+            let x = spatial(a)
+            guard frac > 0, let b, let y = spatial(b), let x else { return x }
+            return x * (1 - frac) + y * frac
+        }
+
+        private func sampleDirection(_ ri: Int, _ ci: Int, _ w00: Double, _ w01: Double, _ w10: Double, _ w11: Double) -> Double? {
+            var x = 0.0, y = 0.0, w = 0.0
+            func add(_ arr: [Double?], _ tw: Double) {
+                for (r, c, wt) in [(ri, ci, w00), (ri, ci + 1, w01), (ri + 1, ci, w10), (ri + 1, ci + 1, w11)] {
+                    if let deg = at(arr, r, c) { let rad = deg * .pi / 180; x += cos(rad) * wt * tw; y += sin(rad) * wt * tw; w += wt * tw }
+                }
+            }
+            add(a, 1 - frac)
+            if frac > 0, let b { add(b, frac) }
+            guard w > 0.001 else { return nil }
+            var deg = atan2(y, x) * 180 / .pi
+            if deg < 0 { deg += 360 }
+            return deg
+        }
+    }
+
+    public func slice(_ v: Variable, time: Date) -> Slice? {
+        guard rows >= 2, cols >= 2, let arr = values[v], let tp = timePosition(time), let lat = latitudeRange, let lon = longitudeRange else { return nil }
+        let n = rows * cols
+        func part(_ t: Int) -> [Double?]? {
+            let start = t * n
+            guard start + n <= arr.count else { return nil }
+            return Array(arr[start..<(start + n)])
+        }
+        guard let a = part(tp.index) else { return nil }
+        let b = tp.fraction > 0 ? part(tp.index + 1) : nil
+        return Slice(rows: rows, cols: cols, minLat: lat.lowerBound, maxLat: lat.upperBound, minLon: lon.lowerBound, maxLon: lon.upperBound,
+                     a: a, b: b, frac: b == nil ? 0 : tp.fraction, isDirection: v.isDirection)
+    }
+
+    /// 速さと向きの切り出しから u/v を出す
+    public struct VectorSlice: Sendable {
+        let speed: Slice, direction: Slice, from: Bool
+        public func sample(at c: Coordinate) -> (u: Double, v: Double)? {
+            guard let s = speed.sample(at: c), let d = direction.sample(at: c) else { return nil }
+            let rad = (from ? d + 180 : d) * .pi / 180
+            return (s * sin(rad), s * cos(rad))
+        }
+    }
+
+    public func vectorSlice(speed: Variable, direction: Variable, time: Date, from: Bool) -> VectorSlice? {
+        guard let s = slice(speed, time: time), let d = slice(direction, time: time) else { return nil }
+        return VectorSlice(speed: s, direction: d, from: from)
+    }
 }

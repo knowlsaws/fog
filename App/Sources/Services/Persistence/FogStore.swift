@@ -35,8 +35,15 @@ final class FogStore {
 
     // MARK: 釣り場
 
+    @ObservationIgnored private var spotsMemo: (revision: Int, value: [Spot])?
+    @ObservationIgnored private var sessionsMemo: (revision: Int, value: [Core.Session])?
+
+    /// 同じ版の間は復号した結果を使い回す（ホームは 30 秒ごとに全釣行を読む）
     func spots() throws -> [Spot] {
-        try context.fetch(FetchDescriptor<SpotRecord>(sortBy: [SortDescriptor(\.createdAt)])).map(\.core)
+        if let m = spotsMemo, m.revision == revision { return m.value }
+        let v = try context.fetch(FetchDescriptor<SpotRecord>(sortBy: [SortDescriptor(\.createdAt)])).map(\.core)
+        spotsMemo = (revision, v)
+        return v
     }
 
     func spot(id: UUID) throws -> Spot? {
@@ -81,7 +88,10 @@ final class FogStore {
     // MARK: 釣行
 
     func sessions() throws -> [Core.Session] {
-        try context.fetch(FetchDescriptor<SessionRecord>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])).compactMap(\.core)
+        if let m = sessionsMemo, m.revision == revision { return m.value }
+        let v = try context.fetch(FetchDescriptor<SessionRecord>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])).compactMap(\.core)
+        sessionsMemo = (revision, v)
+        return v
     }
 
     func sessions(spotID: UUID) throws -> [Core.Session] {

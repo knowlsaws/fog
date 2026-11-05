@@ -59,12 +59,21 @@ struct FieldRaster: @unchecked Sendable {
     static func build(grid: GridForecast, layer: MapLayer, time: Date, box: GeoBox, opacity: Double = MapLayerSettings.defaultOpacity, width: Int = 180, height: Int = 240, uvN: Int = 36) -> FieldRaster {
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         let alpha = UInt8(max(0, min(255, opacity * 255)))
+        let slice = grid.slice(layer.scalar, time: time)
+        // 色は 256 段の表を先に作る（画素ごとに補間しない）
+        let table: [(UInt8, UInt8, UInt8)] = (0..<256).map { i in
+            let r = layer.range
+            let t = Double(i) / 255
+            // 霧は反転しているので、表は正規化後の値で引けるように range 上の値に戻す
+            let value = layer == .fog ? r.upperBound - t * (r.upperBound - r.lowerBound) : r.lowerBound + t * (r.upperBound - r.lowerBound)
+            return layer.rgb(value)
+        }
         for py in 0..<height {
             let y = 1 - (Double(py) + 0.5) / Double(height)
             for px in 0..<width {
                 let x = (Double(px) + 0.5) / Double(width)
-                guard let v = grid.sample(layer.scalar, at: box.coordinate(x: x, y: y), time: time) else { continue }
-                let c = layer.rgb(v)
+                guard let slice, let v = slice.sample(at: box.coordinate(x: x, y: y)) else { continue }
+                let c = table[Int(layer.normalized(v) * 255)]
                 let i = (py * width + px) * 4
                 // premultipliedLast なので色にアルファを掛けておく
                 let a = Int(alpha)
@@ -79,13 +88,13 @@ struct FieldRaster: @unchecked Sendable {
             }
         }
         var u: [Float?] = [], vv: [Float?] = []
-        if let vec = layer.vector {
+        if let vec = layer.vector, let vs = grid.vectorSlice(speed: vec.speed, direction: vec.direction, time: time, from: vec.from) {
             u.reserveCapacity(uvN * uvN); vv.reserveCapacity(uvN * uvN)
             for r in 0..<uvN {
                 let y = Double(r) / Double(uvN - 1)
                 for c in 0..<uvN {
                     let x = Double(c) / Double(uvN - 1)
-                    if let w = grid.vector(speed: vec.speed, direction: vec.direction, at: box.coordinate(x: x, y: y), time: time, from: vec.from) {
+                    if let w = vs.sample(at: box.coordinate(x: x, y: y)) {
                         u.append(Float(w.u)); vv.append(Float(w.v))
                     } else { u.append(nil); vv.append(nil) }
                 }

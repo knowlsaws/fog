@@ -155,4 +155,23 @@ final class GridForecastTests: XCTestCase {
         XCTAssertEqual(m.value(.windSpeed, timeIndex: 0, row: 1, col: 1), 9)   // 共有点は後勝ち（東）
         XCTAssertNil(GridForecast.mosaic([], latStep: 0.1, lonStep: 0.125))
     }
+
+    func testSliceMatchesSample() {
+        let g = makeGrid()
+        let times = [t0, t0.addingTimeInterval(1800), t0.addingTimeInterval(3600)]
+        let points = [Coordinate(latitude: 41.5, longitude: 140.5), Coordinate(latitude: 41.0, longitude: 140.0), Coordinate(latitude: 41.9, longitude: 140.9), Coordinate(latitude: 41.5, longitude: 140.95)]
+        for t in times {
+            let ws = g.slice(.windSpeed, time: t)!, ds = g.slice(.windDirection, time: t)!, ss = g.slice(.seaSurfaceTemperature, time: t)!
+            for c in points {
+                XCTAssertEqual(ws.sample(at: c), g.sample(.windSpeed, at: c, time: t))
+                XCTAssertEqual(ds.sample(at: c)!, g.sample(.windDirection, at: c, time: t)!, accuracy: 1e-9)
+                XCTAssertEqual(ss.sample(at: c), g.sample(.seaSurfaceTemperature, at: c, time: t))
+            }
+            let vs = g.vectorSlice(speed: .windSpeed, direction: .windDirection, time: t, from: true)!
+            let v1 = vs.sample(at: points[0])!, v2 = g.vector(speed: .windSpeed, direction: .windDirection, at: points[0], time: t, from: true)!
+            XCTAssertEqual(v1.u, v2.u, accuracy: 1e-9); XCTAssertEqual(v1.v, v2.v, accuracy: 1e-9)
+        }
+        XCTAssertNil(g.slice(.windSpeed, time: t0)!.sample(at: Coordinate(latitude: 43, longitude: 140.5)))
+        XCTAssertNil(g.slice(.cape, time: t0))
+    }
 }
