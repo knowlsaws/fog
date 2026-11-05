@@ -14,10 +14,17 @@ public struct FeedItem: Codable, Identifiable, Hashable, Sendable {
     public var summary: String?
     public var publishedAt: Date?
     public var fetchedAt: Date
+    /// 配信側が付けた場所（fog:place / fog:lat / fog:lon。fog-feeds が出す）。無ければ nil
+    public var placeName: String?
+    public var coordinate: Coordinate?
+    /// 配信側が付けた魚種（fog:species、「・」区切り）
+    public var speciesHint: [String]?
 
-    public init(id: String, feedURL: String, feedTitle: String, title: String, link: String?, summary: String?, publishedAt: Date?, fetchedAt: Date) {
+    public init(id: String, feedURL: String, feedTitle: String, title: String, link: String?, summary: String?, publishedAt: Date?, fetchedAt: Date,
+                placeName: String? = nil, coordinate: Coordinate? = nil, speciesHint: [String]? = nil) {
         self.id = id; self.feedURL = feedURL; self.feedTitle = feedTitle; self.title = title; self.link = link
         self.summary = summary; self.publishedAt = publishedAt; self.fetchedAt = fetchedAt
+        self.placeName = placeName; self.coordinate = coordinate; self.speciesHint = speciesHint
     }
 }
 
@@ -73,6 +80,7 @@ public enum FeedParser {
         private var text = ""
         private var inItem = false
         private var cur: (title: String, link: String?, guid: String?, summary: String?, date: String?) = ("", nil, nil, nil, nil)
+        private var fog: (place: String?, lat: Double?, lon: Double?, species: String?) = (nil, nil, nil, nil)
 
         init(feedURL: String, fetchedAt: Date) { self.feedURL = feedURL; self.fetchedAt = fetchedAt }
 
@@ -80,7 +88,7 @@ public enum FeedParser {
             let local = name.split(separator: ":").last.map(String.init) ?? name
             path.append(local)
             text = ""
-            if local == "item" || local == "entry" { inItem = true; cur = ("", nil, nil, nil, nil) }
+            if local == "item" || local == "entry" { inItem = true; cur = ("", nil, nil, nil, nil); fog = (nil, nil, nil, nil) }
             // Atom の link は属性
             if inItem, local == "link", let href = attributes["href"], attributes["rel"] == nil || attributes["rel"] == "alternate" { cur.link = href }
         }
@@ -99,12 +107,20 @@ public enum FeedParser {
                 case "guid", "id": cur.guid = value
                 case "description", "summary", "content", "encoded": if cur.summary == nil || (cur.summary ?? "").isEmpty { cur.summary = value }
                 case "pubDate", "published", "updated", "date": if cur.date == nil { cur.date = value }
+                // fog-feeds の拡張（fog:place / fog:lat / fog:lon / fog:species）
+                case "place": fog.place = value
+                case "lat": fog.lat = Double(value)
+                case "lon": fog.lon = Double(value)
+                case "species": fog.species = value
                 case "item", "entry":
                     inItem = false
                     let id = cur.link ?? cur.guid ?? cur.title
                     guard !cur.title.isEmpty || cur.link != nil else { return }
+                    let coordinate = (fog.lat != nil && fog.lon != nil) ? Coordinate(latitude: fog.lat!, longitude: fog.lon!) : nil
+                    let species = fog.species.map { $0.split(separator: "・").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
                     items.append(FeedItem(id: id, feedURL: feedURL, feedTitle: "", title: cur.title.isEmpty ? (cur.link ?? "") : cur.title, link: cur.link,
-                                          summary: cur.summary.map { FeedParser.plainText($0) }, publishedAt: cur.date.flatMap(FeedParser.date(from:)), fetchedAt: fetchedAt))
+                                          summary: cur.summary.map { FeedParser.plainText($0) }, publishedAt: cur.date.flatMap(FeedParser.date(from:)), fetchedAt: fetchedAt,
+                                          placeName: fog.place, coordinate: coordinate?.isPlausible == true ? coordinate : nil, speciesHint: species))
                 default: break
                 }
             } else if local == "title", feedTitle.isEmpty, path.count <= 3 {

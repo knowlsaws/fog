@@ -49,7 +49,7 @@ public enum FeedCatchExtractor {
         Array(Set(catalog.flatMap { [$0.name] + $0.aliases })).filter { $0.count >= 2 }.sorted { $0.count > $1.count }
     }
 
-    /// 1 記事から、文中に出た場所ごとに 1 件。場所が無ければ空
+    /// 1 記事から、文中に出た場所ごとに 1 件。配信側が座標を付けていれば（fog-feeds）それも使う。場所が無ければ空
     public static func extract(_ item: FeedItem, places: [Place], speciesWords: [String]) -> [FeedCatch] {
         let text = item.title + " " + (item.summary ?? "")
         guard !text.isEmpty else { return [] }
@@ -59,6 +59,10 @@ public enum FeedCatchExtractor {
         for p in places where consumed.contains(p.name) {
             found.append(p)
             consumed = consumed.replacingOccurrences(of: p.name, with: String(repeating: "　", count: p.name.count))
+        }
+        // 配信側の場所：文中の港名が無いときの置き場所（市町村名など、アプリの辞書に無い地名も置ける）
+        if found.isEmpty, let name = item.placeName, let c = item.coordinate {
+            found.append(Place(name: name, coordinate: c))
         }
         guard !found.isEmpty else { return [] }
         // 魚種：出た順。同じ語は 1 回
@@ -70,7 +74,9 @@ public enum FeedCatchExtractor {
                 remaining = remaining.replacingOccurrences(of: w, with: String(repeating: "　", count: w.count))
             }
         }
-        let names = species.sorted { $0.0 < $1.0 }.map(\.1)
+        var names = species.sorted { $0.0 < $1.0 }.map(\.1)
+        // 配信側の魚種を補う（文中から拾えなかったもの）
+        for s in item.speciesHint ?? [] where !names.contains(s) { names.append(s) }
         return found.map { p in
             FeedCatch(itemID: item.id, title: item.title, link: item.link, publishedAt: item.publishedAt, feedTitle: item.feedTitle,
                       placeName: p.name, coordinate: p.coordinate, species: names)
