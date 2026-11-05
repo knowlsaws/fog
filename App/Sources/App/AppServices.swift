@@ -18,6 +18,7 @@ final class AppServices {
     let report: ReportService
     let feeds = FeedService()
     let inventory = InventoryStore()
+    let gridForecast = GridForecastService()
     let router = Router()
     var dataManager: DataManager { DataManager(store: store) }
 
