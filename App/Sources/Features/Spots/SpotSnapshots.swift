@@ -69,7 +69,7 @@ struct SpotSnapshotView: View {
             } else {
                 DS.Color.surface
             }
-            // 地図アプリと同じ形の方位計（北が上）。赤い針が北
+            // 地図の北矢印記号（北が上）
             CompassRose().frame(width: 12, height: 22).padding(5)
         }
         .frame(width: SpotSnapshots.size.width, height: SpotSnapshots.size.height)
