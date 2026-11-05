@@ -596,6 +596,8 @@ struct SourcesSettingsView: View {
     @Environment(AppServices.self) private var services
     @State private var weatherAttribution: (serviceName: String, legalURL: URL)?
     @State private var newFeedURL = ""
+    @State private var editingFeed: String?
+    @State private var editingFilter = ""
 
     var body: some View {
         SettingsPage(title: "情報源") {
@@ -631,15 +633,25 @@ struct SourcesSettingsView: View {
                 } header: { SectionLabel(text: "海況・潮汐・港") }
                 Section {
                     ForEach(services.feeds.urls, id: \.self) { u in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(services.feeds.feedTitles[u] ?? "取得待ち").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
-                            Text(u).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
+                        Button { editingFeed = u; editingFilter = services.feeds.filters[u] ?? "" } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: DS.Spacing.s) {
+                                    Text(services.feeds.feedTitles[u] ?? "取得待ち").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
+                                    if let k = services.feeds.kinds[u] {
+                                        Text(k == "rss" ? "RSS" : "リンク一覧").font(.system(size: 9, weight: .semibold)).foregroundStyle(DS.Color.textTertiary)
+                                            .padding(.horizontal, 5).padding(.vertical, 1).background(DS.Color.surfaceRaised, in: Capsule())
+                                    }
+                                }
+                                Text(u).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
+                                if let f = services.feeds.filters[u] { Text("条件: \(f)").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) }
+                            }
                         }
+                        .buttonStyle(.plain)
                         .settingsRow()
                     }
                     .onDelete { idx in idx.map { services.feeds.urls[$0] }.forEach { services.feeds.remove(url: $0) } }
                     HStack {
-                        TextField("RSS の URL（https://…）", text: $newFeedURL).font(DS.Font.label).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("サイトか RSS の URL（https://…）", text: $newFeedURL).font(DS.Font.label).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                         Button("追加") { services.feeds.add(url: newFeedURL); newFeedURL = "" }.font(DS.Font.label).foregroundStyle(DS.Color.accent)
                             .disabled(URL(string: newFeedURL)?.scheme?.hasPrefix("http") != true)
                     }
@@ -647,11 +659,16 @@ struct SourcesSettingsView: View {
                     if let e = services.feeds.lastError {
                         Text(e).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
                     }
-                    Text("釣りメディア・釣具店ブログの RSS を登録すると、ホームの 1 行と「釣果情報」に集まります。取得は 1 時間に 1 回。記事の本文は読みに行きません").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
-                } header: { SectionLabel(text: "釣果情報（RSS）") }
+                    Text("RSS でもサイトの URL でも登録できます。RSS が無いサイトはページのリンク一覧を記事として読みます（行をタップで「記事リンクの条件」を設定。例: /report/）。取得は 1 時間に 1 回。記事の本文は読みに行きません").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                } header: { SectionLabel(text: "釣果情報（RSS・サイト）") }
             }
             .listStyle(.plain)
         }
         .task { weatherAttribution = await WeatherKitProvider.attribution() }
+        .alert("記事リンクの条件", isPresented: Binding(get: { editingFeed != nil }, set: { if !$0 { editingFeed = nil } })) {
+            TextField("例: /report/（空なら全部）", text: $editingFilter)
+            Button("保存") { if let u = editingFeed { services.feeds.setFilter(url: u, filter: editingFilter) }; editingFeed = nil }
+            Button("キャンセル", role: .cancel) { editingFeed = nil }
+        } message: { Text("RSS の無いサイトで、URL にこの文字を含むリンクだけを記事にします") }
     }
 }
