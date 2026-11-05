@@ -40,6 +40,14 @@ public enum FeedCatchExtractor {
         for s in spots where s.name.count >= 2 && s.name != "釣り場" && s.name != "位置不明" {
             byName[s.name] = Place(name: s.name, coordinate: s.coordinate)
         }
+        // 港の中の施設（「函館港 北ふ頭」）は後ろの名前（「北ふ頭」）でも当てる。記事は施設名だけで書くことが多い（F-47）
+        let generic: Set<String> = ["漁港", "ふ頭", "埠頭", "岸壁", "防波堤", "船だまり", "港"]
+        for (name, place) in byName {
+            let parts = name.split(separator: " ").map(String.init)
+            guard parts.count >= 2, let last = parts.last, last.count >= 3, !generic.contains(last), byName[last] == nil else { continue }
+            if let near, Geo.distanceMeters(place.coordinate, near) > 150_000 { continue }
+            byName[last] = Place(name: last, coordinate: place.coordinate)
+        }
         // 長い名前から当てる（「函館港」より「函館漁港」を先に）
         return byName.values.sorted { $0.name.count > $1.name.count }
     }

@@ -13,6 +13,9 @@ final class SpotsViewModel {
         let distanceM: Double?
         /// 地図検索で見つけた漁港（まだストアに無い）。「登録」で自分の釣り場になる
         var isCandidate: Bool = false
+        /// 自分の釣果と針ロストの位置（カードの航空写真に点で出す。F-47）
+        var catchPoints: [Coordinate] = []
+        var lossPoints: [Coordinate] = []
         var id: UUID { spot.id }
     }
 
@@ -56,7 +59,10 @@ final class SpotsViewModel {
             let score = engine.score(ScoreInput(at: now, coordinate: spot.coordinate, env: env)).score
             let stats = bySpot[spot.id] ?? Analytics.spotStats(sessions: [])
             let d = currentLocation.map { Geo.distanceMeters($0, spot.coordinate) }
-            return Card(spot: spot, stats: stats, score: score, distanceM: d)
+            let mine = sessions.filter { $0.spotID == spot.id }
+            return Card(spot: spot, stats: stats, score: score, distanceM: d,
+                        catchPoints: mine.flatMap(\.catches).map(\.coordinate).filter(\.isPlausible),
+                        lossPoints: mine.flatMap(\.hookEvents).filter { $0.kind == .lost }.map(\.coordinate).filter(\.isPlausible))
         }.sorted { ($0.distanceM ?? .infinity) < ($1.distanceM ?? .infinity) }
     }
 
