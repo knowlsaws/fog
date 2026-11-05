@@ -14,16 +14,36 @@ struct SpotsView: View {
     @State private var showCompare = false
     /// 表示範囲の緯度幅（度）。狭いほど拡大している
     @State private var latitudeSpan: Double = 0.1
+    // 地図レイヤー（F-43）
+    @State private var layersOn = false
+    @State private var layer: MapLayer = .wind
+    @State private var hourOffset = 0
+    @State private var raster: FieldRaster?
+    @State private var particles = ParticleSystem(count: MapLayerSettings.density.count)
+    @State private var region: MKCoordinateRegion?
+    @State private var showLayerSettings = false
+    static let layerHours = 71
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            map.ignoresSafeArea(edges: .top)
+            MapReader { proxy in
+                map.overlay {
+                    if layersOn { MapLayersOverlay(proxy: proxy, raster: raster, particles: particles, animate: layer.vector != nil && MapLayerSettings.particles) }
+                }
+            }
+            .ignoresSafeArea(edges: .top)
             VStack {
-                HStack {
+                HStack(alignment: .top) {
+                    if layersOn {
+                        MapLayersControls(layer: $layer, hourOffset: $hourOffset, start: layerStart, hours: Self.layerHours,
+                                          loading: services.gridForecast.loading, error: services.gridForecast.lastError, onSettings: { showLayerSettings = true })
+                            .padding(.leading, DS.Spacing.l).padding(.top, DS.Spacing.l)
+                    }
                     Spacer()
                     VStack(spacing: DS.Spacing.s) {
                         roundButton("magnifyingglass") { showSearch = true }
                         roundButton("list.number") { showCompare = true }
+                        roundButton(layersOn ? "square.3.layers.3d.top.filled" : "square.3.layers.3d") { toggleLayers() }
                         roundButton("location.fill") { if let c = model.currentLocation { camera = .region(MKCoordinateRegion(center: c.cl, latitudinalMeters: 3000, longitudinalMeters: 3000)) } }
                     }
                     .padding(DS.Spacing.l)
@@ -32,6 +52,14 @@ struct SpotsView: View {
             }
             cards
         }
+        .onChange(of: layer) { _, _ in rebuildRaster() }
+        .sheet(isPresented: $showLayerSettings, onDismiss: {
+            particles = ParticleSystem(count: MapLayerSettings.density.count)
+            if !MapLayerSettings.isEnabled(layer), let first = MapLayerSettings.enabled.first { layer = first }
+            rebuildRaster()
+        }) { NavigationStack { MapLayerSettingsView() }.preferredColorScheme(.dark).tint(DS.Color.accent) }
+        .onChange(of: hourOffset) { _, _ in rebuildRaster() }
+        .onChange(of: services.gridForecast.loading) { _, loading in if !loading { rebuildRaster() } }
         .onAppear {
             model.attach(services)
             if let first = model.cards.first(where: { $0.spot.coordinate.isPlausible }) {
@@ -81,12 +109,50 @@ struct SpotsView: View {
         }
         .onMapCameraChange(frequency: .onEnd) { context in
             latitudeSpan = context.region.span.latitudeDelta
+            region = context.region
             model.searchPorts(in: context.region)
+            if layersOn {
+                services.gridForecast.ensure(center: Coordinate(latitude: context.region.center.latitude, longitude: context.region.center.longitude))
+                rebuildRaster()
+            }
         }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
         .saturation(0)
         .contrast(0.9)
         .mapControlVisibility(.hidden)
+    }
+
+    // MARK: 地図レイヤー（F-43）
+
+    /// 時刻バーの起点：今の時刻を 1 時間に切り下げ
+    private var layerStart: Date {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "Asia/Tokyo") ?? .current
+        let c = cal.dateComponents([.year, .month, .day, .hour], from: Date())
+        return cal.date(from: c) ?? Date()
+    }
+
+    private func toggleLayers() {
+        layersOn.toggle()
+        guard layersOn else { raster = nil; return }
+        if !MapLayerSettings.isEnabled(layer), let first = MapLayerSettings.enabled.first { layer = first }
+        if let region {
+            services.gridForecast.ensure(center: Coordinate(latitude: region.center.latitude, longitude: region.center.longitude))
+        } else if let c = model.currentLocation ?? model.cards.first?.spot.coordinate {
+            services.gridForecast.ensure(center: c)
+        }
+        rebuildRaster()
+    }
+
+    /// 表示範囲（少し広げる）に対して色面と流れの格子を作り直す
+    private func rebuildRaster() {
+        guard layersOn, let region else { raster = nil; return }
+        let grid = layer.isMarine ? services.gridForecast.marine : services.gridForecast.weather
+        guard let grid, !grid.isEmpty else { raster = nil; return }
+        let half = region.span.latitudeDelta / 2, halfLon = region.span.longitudeDelta / 2
+        let box = GeoBox(minLat: region.center.latitude - half, maxLat: region.center.latitude + half,
+                         minLon: region.center.longitude - halfLon, maxLon: region.center.longitude + halfLon).expanded(by: 0.3)
+        let time = layerStart.addingTimeInterval(Double(hourOffset) * 3600)
+        raster = FieldRaster.build(grid: grid, layer: layer, time: time, box: box, opacity: MapLayerSettings.opacity)
     }
 
     private func roundButton(_ symbol: String, action: @escaping () -> Void) -> some View {
@@ -102,6 +168,10 @@ struct SpotsView: View {
         GeometryReader { geo in
             VStack {
                 Spacer()
+                if layersOn {
+                    MapTimeBar(hourOffset: $hourOffset, start: layerStart, hours: Self.layerHours)
+                        .frame(height: 40).padding(.horizontal, DS.Spacing.l).padding(.bottom, DS.Spacing.s)
+                }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: DS.Spacing.m) {
                         ForEach(model.allCards) { card in
