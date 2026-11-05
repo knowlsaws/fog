@@ -112,6 +112,19 @@ final class SpotsViewModel {
         catalogPorts = out
     }
 
+    // MARK: 釣果情報のピン（F-44）
+
+    /// RSS の記事から取り出した「どこで何が釣れたか」。場所は同梱の港名と登録釣り場、魚種は図鑑の名前と別名
+    func feedPins() -> [FeedCatchExtractor.Pin] {
+        guard let services else { return [] }
+        let spots = ((try? services.store.spots()) ?? []).filter { $0.isRegistered && $0.coordinate.isPlausible }.map { (name: $0.name, coordinate: $0.coordinate) }
+        let near = currentLocation ?? spots.first?.coordinate
+        let places = FeedCatchExtractor.places(spots: spots, ports: portCatalog.ports, near: near)
+        let words = FeedCatchExtractor.speciesWords((try? services.store.species()) ?? Species.initialCatalog)
+        let catches = services.feeds.items.flatMap { FeedCatchExtractor.extract($0, places: places, speciesWords: words) }
+        return FeedCatchExtractor.pins(catches)
+    }
+
     // MARK: 釣り場の比較（F-30）
 
     struct CompareRow: Identifiable {

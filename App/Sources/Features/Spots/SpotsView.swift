@@ -22,6 +22,11 @@ struct SpotsView: View {
     @State private var particles = ParticleSystem(count: MapLayerSettings.density.count)
     @State private var region: MKCoordinateRegion?
     @State private var showLayerSettings = false
+    // 釣果情報のピン（F-44）
+    /// 既定で表示（2026-11-05 開発者の指示）。オフにしたら覚える
+    @State private var feedPinsOn = UserDefaults.standard.object(forKey: "fog.feedPins.on") as? Bool ?? true
+    @State private var feedPins: [FeedCatchExtractor.Pin] = []
+    @State private var feedPin: FeedCatchExtractor.Pin?
     @State private var rasterTask: Task<Void, Never>?
     /// 時刻ごとの色面（同じ層・同じ範囲・同じ版の間だけ有効）。時刻バーを戻しても即座に出る
     @State private var rasterCache: [Int: FieldRaster] = [:]
@@ -48,6 +53,7 @@ struct SpotsView: View {
                         roundButton("magnifyingglass") { showSearch = true }
                         roundButton("list.number") { showCompare = true }
                         roundButton(layersOn ? "square.3.layers.3d.top.filled" : "square.3.layers.3d") { toggleLayers() }
+                        roundButton(feedPinsOn ? "fish.fill" : "fish") { toggleFeedPins() }
                         roundButton("location.fill") { if let c = model.currentLocation { camera = .region(MKCoordinateRegion(center: c.cl, latitudinalMeters: 3000, longitudinalMeters: 3000)) } }
                     }
                     .padding(DS.Spacing.l)
@@ -66,6 +72,7 @@ struct SpotsView: View {
         .onChange(of: services.gridForecast.version) { _, _ in rebuildRaster() }
         .onAppear {
             model.attach(services)
+            if feedPinsOn { feedPins = model.feedPins() }
             if let first = model.cards.first(where: { $0.spot.coordinate.isPlausible }) {
                 selectedID = first.spot.id
                 camera = .region(region(for: first.spot.coordinate))
@@ -81,6 +88,8 @@ struct SpotsView: View {
         }
         .sheet(item: $detail) { SpotDetailView(card: $0).onDisappear { model.refresh() } }
         .sheet(isPresented: $showCompare) { SpotCompareSheet(model: model).presentationDetents([.large]) }
+        .sheet(item: $feedPin) { FeedPinSheet(pin: $0).presentationDetents([.medium, .large]) }
+        .onChange(of: services.feeds.items.count) { _, _ in if feedPinsOn { feedPins = model.feedPins() } }
         .sheet(isPresented: $showSearch) { SpotSearchSheet { item in
             showSearch = false
             camera = .region(MKCoordinateRegion(center: item.placemark.coordinate, latitudinalMeters: 3000, longitudinalMeters: 3000))
@@ -110,6 +119,14 @@ struct SpotsView: View {
                     Circle().fill(.white).frame(width: 10, height: 10).overlay(Circle().stroke(DS.Color.background, lineWidth: 2))
                 }
             }
+            // RSS の記事から拾った釣果（F-44）：場所ごとに 1 つ。新しいほど濃い
+            if feedPinsOn {
+                ForEach(feedPins) { pin in
+                    Annotation("", coordinate: pin.coordinate.cl, anchor: .bottom) {
+                        Button { feedPin = pin } label: { FeedPinMarker(pin: pin) }.buttonStyle(.plain)
+                    }
+                }
+            }
         }
         .onMapCameraChange(frequency: .onEnd) { context in
             latitudeSpan = context.region.span.latitudeDelta
@@ -125,6 +142,16 @@ struct SpotsView: View {
         .saturation(0)
         .contrast(0.9)
         .mapControlVisibility(.hidden)
+    }
+
+    // MARK: 釣果情報のピン（F-44）
+
+    private func toggleFeedPins() {
+        feedPinsOn.toggle()
+        UserDefaults.standard.set(feedPinsOn, forKey: "fog.feedPins.on")
+        guard feedPinsOn else { feedPins = []; return }
+        feedPins = model.feedPins()
+        Task { await services.feeds.refreshIfNeeded() }
     }
 
     // MARK: 地図レイヤー（F-43）
@@ -447,5 +474,76 @@ struct SpotCompareSheet: View {
         }
         .padding(DS.Spacing.m)
         .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
+    }
+}
+
+/// 釣果情報のピン：魚のアイコンと件数。直近 7 日は濃く、2 週間を過ぎると薄く
+struct FeedPinMarker: View {
+    let pin: FeedCatchExtractor.Pin
+    private var age: TimeInterval { Date().timeIntervalSince(pin.latestAt ?? .distantPast) }
+    private var opacity: Double { age < 7 * 86_400 ? 1 : (age < 14 * 86_400 ? 0.75 : 0.45) }
+    var body: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 3) {
+                Image(systemName: "fish.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(DS.Color.background)
+                Text(pin.speciesCounts.first.map { "\($0.0)" } ?? "記事").font(.system(size: 10, weight: .semibold)).foregroundStyle(DS.Color.background).lineLimit(1)
+                if pin.entries.count > 1 { Text("\(pin.entries.count)").font(.system(size: 10, weight: .bold, design: .rounded)).foregroundStyle(DS.Color.background.opacity(0.7)) }
+            }
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background(DS.Color.sun, in: Capsule())
+            Triangle().fill(DS.Color.sun).frame(width: 8, height: 5)
+        }
+        .opacity(opacity)
+    }
+
+    struct Triangle: Shape {
+        func path(in r: CGRect) -> Path {
+            var p = Path(); p.move(to: CGPoint(x: r.minX, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY)); p.addLine(to: CGPoint(x: r.midX, y: r.maxY)); p.closeSubpath(); return p
+        }
+    }
+}
+
+/// ピンをタップ：その場所の記事を新しい順に。魚種・日付・出典、タップで記事へ
+struct FeedPinSheet: View {
+    let pin: FeedCatchExtractor.Pin
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.m) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(pin.placeName).font(DS.Font.number(20)).foregroundStyle(DS.Color.textPrimary)
+                Spacer()
+                Text("\(pin.entries.count) 記事").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            }
+            if !pin.speciesCounts.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: DS.Spacing.xs) {
+                        ForEach(Array(pin.speciesCounts.enumerated()), id: \.offset) { _, sc in
+                            Text("\(sc.0) \(sc.1)").font(DS.Font.caption).foregroundStyle(DS.Color.background)
+                                .padding(.horizontal, DS.Spacing.s).padding(.vertical, 3).background(DS.Color.sun, in: Capsule())
+                        }
+                    }
+                }
+            }
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: DS.Spacing.s) {
+                    ForEach(pin.entries) { e in
+                        let content = VStack(alignment: .leading, spacing: 3) {
+                            Text(e.title).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).lineLimit(2)
+                            HStack(spacing: DS.Spacing.s) {
+                                if !e.species.isEmpty { Text(e.species.joined(separator: "・")).font(DS.Font.caption).foregroundStyle(DS.Color.sun) }
+                                if let d = e.publishedAt { Text(d, format: .dateTime.month().day()).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) }
+                                Text(e.feedTitle).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
+                            }
+                        }
+                        .padding(DS.Spacing.m).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
+                        if let link = e.link, let url = URL(string: link) { Link(destination: url) { content } } else { content }
+                    }
+                }
+            }
+            Text("見出しと要約に出た港名・釣り場名と魚種名から置いています。場所が書かれていない記事は出ません").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+        }
+        .padding(DS.Spacing.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(DS.Color.background)
     }
 }
