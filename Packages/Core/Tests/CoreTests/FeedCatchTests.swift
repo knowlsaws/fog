@@ -61,4 +61,16 @@ final class FeedCatchTests: XCTestCase {
         j.placeName = "室蘭"; j.coordinate = Coordinate(latitude: 42.315, longitude: 140.974)
         XCTAssertEqual(FeedCatchExtractor.extract(j, places: places, speciesWords: words).map(\.placeName), ["函館港"])
     }
+
+    func testFacilityAliasInsidePort() {
+        let ports = [Port(name: "函館港 北ふ頭", lat: 41.80, lon: 140.73, kind: .harbor), Port(name: "函館港", lat: 41.78, lon: 140.72, kind: .harbor),
+                     Port(name: "函館港 西ふ頭", lat: 41.77, lon: 140.71, kind: .harbor), Port(name: "室蘭港 中央ふ頭", lat: 42.32, lon: 140.97, kind: .harbor)]
+        let places = FeedCatchExtractor.places(spots: [], ports: ports, near: hakodate)
+        XCTAssertNotNil(places.first { $0.name == "北ふ頭" })
+        XCTAssertEqual(places.first { $0.name == "北ふ頭" }?.coordinate.latitude ?? 0, 41.80, accuracy: 1e-9)
+        let words = FeedCatchExtractor.speciesWords(Species.initialCatalog)
+        let out = FeedCatchExtractor.extract(item("h", "北ふ頭でサバ", nil), places: places, speciesWords: words)
+        XCTAssertEqual(out.map(\.placeName), ["北ふ頭"])
+        XCTAssertEqual(out[0].species, ["サバ"].filter { words.contains($0) })
+    }
 }

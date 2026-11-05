@@ -9,20 +9,21 @@ import Core
 @MainActor
 final class SpotSnapshots {
     static let shared = SpotSnapshots()
-    private var images: [String: UIImage] = [:]
-    private var inFlight: [String: Task<UIImage?, Never>] = [:]
+    private var images: [String: MKMapSnapshotter.Snapshot] = [:]
+    private var inFlight: [String: Task<MKMapSnapshotter.Snapshot?, Never>] = [:]
     static let size = CGSize(width: 120, height: 76)
 
     private func key(_ c: Coordinate) -> String { String(format: "%.4f,%.4f", c.latitude, c.longitude) }
 
-    func cached(for c: Coordinate) -> UIImage? { images[key(c)] }
+    func cached(for c: Coordinate) -> MKMapSnapshotter.Snapshot? { images[key(c)] }
 
-    func image(for c: Coordinate) async -> UIImage? {
+    /// 写真と、座標を写真の中の位置に写す関数（点を重ねるため）
+    func image(for c: Coordinate) async -> MKMapSnapshotter.Snapshot? {
         guard c.isPlausible else { return nil }
         let k = key(c)
         if let img = images[k] { return img }
         if let t = inFlight[k] { return await t.value }
-        let task = Task<UIImage?, Never> {
+        let task = Task<MKMapSnapshotter.Snapshot?, Never> {
             let options = MKMapSnapshotter.Options()
             // 幅約 1 km・高さ約 630 m。北が上（回転なし）
             options.region = MKCoordinateRegion(center: c.cl, latitudinalMeters: 630, longitudinalMeters: 1000)
@@ -31,8 +32,7 @@ final class SpotSnapshots {
             options.pointOfInterestFilter = .excludingAll
             options.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
             do {
-                let snap = try await MKMapSnapshotter(options: options).start()
-                return snap.image
+                return try await MKMapSnapshotter(options: options).start()
             } catch {
                 return nil
             }
@@ -45,15 +45,27 @@ final class SpotSnapshots {
     }
 }
 
-/// カードに置く航空写真：角丸、右上に「N」の印、取れるまでは暗い面
+/// カードに置く航空写真：角丸、右上に「N」の印、取れるまでは暗い面。
+/// 自分の釣果（テーマ色）・針ロスト（白）・釣果情報の記事（黄）の位置を点で重ねる（F-47）
 struct SpotSnapshotView: View {
     let coordinate: Coordinate
-    @State private var image: UIImage?
+    var catchPoints: [Coordinate] = []
+    var lossPoints: [Coordinate] = []
+    var feedPoints: [Coordinate] = []
+    @State private var snapshot: MKMapSnapshotter.Snapshot?
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            if let image {
-                Image(uiImage: image).resizable().scaledToFill()
+            if let snapshot {
+                Image(uiImage: snapshot.image).resizable().scaledToFill()
+                ZStack(alignment: .topLeading) {
+                    Color.clear
+                    ForEach(Array(dots(snapshot).enumerated()), id: \.offset) { _, d in
+                        Circle().fill(d.color).frame(width: d.size, height: d.size)
+                            .overlay(Circle().stroke(DS.Color.background.opacity(0.8), lineWidth: 1))
+                            .position(d.point)
+                    }
+                }
             } else {
                 DS.Color.surface
             }
@@ -69,7 +81,22 @@ struct SpotSnapshotView: View {
         .frame(width: SpotSnapshots.size.width, height: SpotSnapshots.size.height)
         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
         .task(id: "\(coordinate.latitude),\(coordinate.longitude)") {
-            image = SpotSnapshots.shared.cached(for: coordinate) ?? (await SpotSnapshots.shared.image(for: coordinate))
+            snapshot = SpotSnapshots.shared.cached(for: coordinate) ?? (await SpotSnapshots.shared.image(for: coordinate))
         }
+    }
+
+    private struct Dot { let point: CGPoint; let color: Color; let size: CGFloat }
+
+    /// 写真の中に入る点だけ。記事の点は港の代表点そのものなら出さない（場所が「港」としか分からないため）
+    private func dots(_ snap: MKMapSnapshotter.Snapshot) -> [Dot] {
+        let size = SpotSnapshots.size
+        func inside(_ p: CGPoint) -> Bool { p.x >= 2 && p.y >= 2 && p.x <= size.width - 2 && p.y <= size.height - 2 }
+        var out: [Dot] = []
+        for c in lossPoints { let p = snap.point(for: c.cl); if inside(p) { out.append(Dot(point: p, color: .white, size: 5)) } }
+        for c in feedPoints where Geo.distanceMeters(c, coordinate) > 15 {
+            let p = snap.point(for: c.cl); if inside(p) { out.append(Dot(point: p, color: DS.Color.sun, size: 6)) }
+        }
+        for c in catchPoints { let p = snap.point(for: c.cl); if inside(p) { out.append(Dot(point: p, color: DS.Color.accent, size: 6)) } }
+        return out
     }
 }

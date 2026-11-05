@@ -259,6 +259,7 @@ struct SpotsView: View {
                     LazyHStack(spacing: DS.Spacing.m) {
                         ForEach(model.allCards) { card in
                             SpotCardView(card: card, selected: selectedID == card.spot.id,
+                                         feedPoints: feedPinsOn ? feedPins.map(\.coordinate).filter { Geo.distanceMeters($0, card.spot.coordinate) < 1200 } : [],
                                          onSelectHome: { model.selectForHome(card.spot) },
                                          onRegister: { model.register(card) })
                                 .frame(width: 230)
@@ -290,6 +291,8 @@ extension Coordinate {
 struct SpotCardView: View {
     let card: SpotsViewModel.Card
     let selected: Bool
+    /// 釣果情報の記事の位置（写真に黄色の点。F-47）
+    var feedPoints: [Coordinate] = []
     let onSelectHome: () -> Void
     var onRegister: () -> Void = {}
 
@@ -319,7 +322,9 @@ struct SpotCardView: View {
                 }
                 Spacer(minLength: 0)
                 // 釣り場の形（上から見た航空写真、北が上。F-46）
-                if card.spot.coordinate.isPlausible { SpotSnapshotView(coordinate: card.spot.coordinate) }
+                if card.spot.coordinate.isPlausible {
+                    SpotSnapshotView(coordinate: card.spot.coordinate, catchPoints: card.catchPoints, lossPoints: card.lossPoints, feedPoints: feedPoints)
+                }
             }
             Spacer(minLength: 0)
             HStack(alignment: .center, spacing: DS.Spacing.m) {
