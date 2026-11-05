@@ -23,7 +23,8 @@ struct SpotsView: View {
     @State private var region: MKCoordinateRegion?
     @State private var showLayerSettings = false
     // 釣果情報のピン（F-44）
-    @State private var feedPinsOn = false
+    /// 既定で表示（2026-11-05 開発者の指示）。オフにしたら覚える
+    @State private var feedPinsOn = UserDefaults.standard.object(forKey: "fog.feedPins.on") as? Bool ?? true
     @State private var feedPins: [FeedCatchExtractor.Pin] = []
     @State private var feedPin: FeedCatchExtractor.Pin?
     @State private var rasterTask: Task<Void, Never>?
@@ -71,6 +72,7 @@ struct SpotsView: View {
         .onChange(of: services.gridForecast.version) { _, _ in rebuildRaster() }
         .onAppear {
             model.attach(services)
+            if feedPinsOn { feedPins = model.feedPins() }
             if let first = model.cards.first(where: { $0.spot.coordinate.isPlausible }) {
                 selectedID = first.spot.id
                 camera = .region(region(for: first.spot.coordinate))
@@ -146,6 +148,7 @@ struct SpotsView: View {
 
     private func toggleFeedPins() {
         feedPinsOn.toggle()
+        UserDefaults.standard.set(feedPinsOn, forKey: "fog.feedPins.on")
         guard feedPinsOn else { feedPins = []; return }
         feedPins = model.feedPins()
         Task { await services.feeds.refreshIfNeeded() }
