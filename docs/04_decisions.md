@@ -17,6 +17,7 @@ Claude Code が設計判断で迷ったら、まずここに「提案」とし�
 | --- | --- | --- |
 | 釣り場の形は Apple の地図の衛星写真（`MKMapSnapshotter`、`MKImageryMapConfiguration`）を静止画にして出す。北が上、幅約 1 km、釣り場ごとに 1 回作って覚える | 防波堤・岸壁の形が最もよく分かる公開情報で、既に使っている MapKit の範囲。国土数値情報の港データは点だけで形を持たない | `SpotSnapshots` / `SpotSnapshotView` |
 | カードの並びは `LazyHStack` | 画面外のカードの写真を作らない | `SpotsView` |
+| 北の印は「N↑」の文字ではなく、地図アプリと同じ方位計のアイコン（赤い針が北） | 開発者の指定 | `CompassRose` |
 
 ## 2026-11-05 L23 フィードバック 2（取り直しと再計算）
 

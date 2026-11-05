@@ -69,14 +69,8 @@ struct SpotSnapshotView: View {
             } else {
                 DS.Color.surface
             }
-            HStack(spacing: 1) {
-                Image(systemName: "arrow.up").font(.system(size: 7, weight: .bold))
-                Text("N").font(.system(size: 8, weight: .bold, design: .rounded))
-            }
-            .foregroundStyle(DS.Color.textPrimary)
-            .padding(.horizontal, 4).padding(.vertical, 2)
-            .background(DS.Color.background.opacity(0.7), in: Capsule())
-            .padding(4)
+            // 地図アプリと同じ形の方位計（北が上）。赤い針が北
+            CompassRose().frame(width: 18, height: 18).padding(4)
         }
         .frame(width: SpotSnapshots.size.width, height: SpotSnapshots.size.height)
         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
@@ -98,5 +92,30 @@ struct SpotSnapshotView: View {
         }
         for c in catchPoints { let p = snap.point(for: c.cl); if inside(p) { out.append(Dot(point: p, color: DS.Color.accent, size: 6)) } }
         return out
+    }
+}
+
+/// 小さな方位計：暗い円に、北を指す赤い針と南側の白い針。回転はしない（写真は常に北が上）
+struct CompassRose: View {
+    var body: some View {
+        ZStack {
+            Circle().fill(DS.Color.background.opacity(0.8))
+            Circle().stroke(Color.white.opacity(0.35), lineWidth: 0.8)
+            Needle().fill(Color(red: 0.95, green: 0.27, blue: 0.27)).padding(3)
+            Needle().fill(Color.white.opacity(0.85)).rotationEffect(.degrees(180)).padding(3)
+        }
+    }
+
+    /// 中心から上に伸びる細い三角（針の半分）
+    struct Needle: Shape {
+        func path(in r: CGRect) -> Path {
+            var p = Path()
+            let c = CGPoint(x: r.midX, y: r.midY)
+            p.move(to: CGPoint(x: r.midX, y: r.minY))
+            p.addLine(to: CGPoint(x: c.x + r.width * 0.16, y: c.y))
+            p.addLine(to: CGPoint(x: c.x - r.width * 0.16, y: c.y))
+            p.closeSubpath()
+            return p
+        }
     }
 }
