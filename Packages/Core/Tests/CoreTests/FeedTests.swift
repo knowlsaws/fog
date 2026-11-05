@@ -19,6 +19,11 @@ final class FeedTests: XCTestCase {
         XCTAssertEqual(a.summary, "朝マズメに アイナメ が連発。40cm超えも。")
         XCTAssertEqual(a.publishedAt, ISO8601DateFormatter().date(from: "2026-11-04T00:00:00Z"))
         XCTAssertEqual(r.items[1].summary, "投げ釣りでカレイ。")
+        // fog-feeds の拡張要素
+        XCTAssertEqual(r.items[1].placeName, "七重浜")
+        XCTAssertEqual(r.items[1].coordinate?.latitude ?? 0, 41.806, accuracy: 1e-6)
+        XCTAssertEqual(r.items[1].speciesHint, ["カレイ", "ホッケ"])
+        XCTAssertNil(r.items[0].coordinate)
     }
 
     func testParseAtom() throws {

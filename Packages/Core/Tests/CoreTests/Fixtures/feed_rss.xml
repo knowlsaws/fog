@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:fog="https://github.com/knowlsaws/fog-feeds">
 <channel>
 <title>函館釣り情報</title>
 <link>https://example.com/</link>
@@ -15,6 +15,10 @@
 <link>https://example.com/a2</link>
 <pubDate>Tue, 03 Nov 2026 18:30:00 +0900</pubDate>
 <description>投げ釣りでカレイ。</description>
+<fog:place>七重浜</fog:place>
+<fog:lat>41.80600</fog:lat>
+<fog:lon>140.69000</fog:lon>
+<fog:species>カレイ・ホッケ</fog:species>
 </item>
 </channel>
 </rss>

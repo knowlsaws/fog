@@ -45,4 +45,20 @@ final class FeedCatchTests: XCTestCase {
         XCTAssertEqual(pins[0].speciesCounts[0].1, 2)
         XCTAssertEqual(pins[0].latestAt, items[1].publishedAt)
     }
+
+    func testFeedCoordinateIsUsedWhenNoPortInText() {
+        let places = [FeedCatchExtractor.Place(name: "函館港", coordinate: hakodate)]
+        let words = FeedCatchExtractor.speciesWords(Species.initialCatalog)
+        var i = item("f", "登別〜室蘭方面 漁港ランガン", "良型のカジカ")
+        i.placeName = "室蘭"; i.coordinate = Coordinate(latitude: 42.315, longitude: 140.974); i.speciesHint = ["カジカ", "クロソイ"]
+        let out = FeedCatchExtractor.extract(i, places: places, speciesWords: words)
+        XCTAssertEqual(out.count, 1)
+        XCTAssertEqual(out[0].placeName, "室蘭")
+        XCTAssertEqual(out[0].coordinate.latitude, 42.315, accuracy: 1e-9)
+        XCTAssertEqual(out[0].species, ["カジカ", "クロソイ"])
+        // 文中に港名があればそちらを優先（配信側の場所は使わない）
+        var j = item("g", "函館港でアブラコ", nil)
+        j.placeName = "室蘭"; j.coordinate = Coordinate(latitude: 42.315, longitude: 140.974)
+        XCTAssertEqual(FeedCatchExtractor.extract(j, places: places, speciesWords: words).map(\.placeName), ["函館港"])
+    }
 }
