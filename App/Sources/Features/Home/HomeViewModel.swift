@@ -234,6 +234,11 @@ final class HomeViewModel {
                                     airTemperatureAt: { env.snapshot(at: $0, coordinate: coordinate).airTemperatureC }, now: now, timeZone: timeZone)
         // 安全通知（F-36）：釣行中だけ予約し直す（帰る時間の設定変更を反映するため）
         if isRecording { SafetyNotifier.schedule(at: now, coordinate: coordinate, environment: env, timeZone: timeZone) }
+        // 地図レイヤー（F-43）：使ったことがあれば、この釣り場の周りのタイルを先に用意しておく（開いたときに最初からある）
+        if MapLayerSettings.usedOnce {
+            services.gridForecast.ensure(minLat: coordinate.latitude - 0.1, maxLat: coordinate.latitude + 0.1,
+                                         minLon: coordinate.longitude - 0.12, maxLon: coordinate.longitude + 0.12, now: now)
+        }
         // ライブ画面（F-38）：次の満干と次のマズメ
         liveNextTide = tideExtremes.first { $0.at > now }
         liveNextTwilight = Self.nextTwilight(now: now, coordinate: coordinate, timeZone: timeZone)

@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import MapKit
 import Core
 
 /// 地図の表示範囲（緯度経度の箱）に対して、色面の画像と粒子用の流れの格子を作る（F-43）。
@@ -15,6 +16,13 @@ struct GeoBox: Equatable {
         Coordinate(latitude: minLat + (maxLat - minLat) * y, longitude: minLon + (maxLon - minLon) * x)
     }
 
+    /// 表示範囲が箱の中に収まっているか
+    func contains(region: MKCoordinateRegion) -> Bool {
+        let half = region.span.latitudeDelta / 2, halfLon = region.span.longitudeDelta / 2
+        return region.center.latitude - half >= minLat && region.center.latitude + half <= maxLat
+            && region.center.longitude - halfLon >= minLon && region.center.longitude + halfLon <= maxLon
+    }
+
     /// 少し広げる（パンしても端が切れないように）
     func expanded(by f: Double) -> GeoBox {
         let dLat = (maxLat - minLat) * f, dLon = (maxLon - minLon) * f
@@ -22,7 +30,7 @@ struct GeoBox: Equatable {
     }
 }
 
-struct FieldRaster {
+struct FieldRaster: @unchecked Sendable {
     let box: GeoBox
     let layer: MapLayer
     let time: Date

@@ -22,6 +22,7 @@ struct SpotsView: View {
     @State private var particles = ParticleSystem(count: MapLayerSettings.density.count)
     @State private var region: MKCoordinateRegion?
     @State private var showLayerSettings = false
+    @State private var rasterTask: Task<Void, Never>?
     static let layerHours = 71
 
     var body: some View {
@@ -59,7 +60,7 @@ struct SpotsView: View {
             rebuildRaster()
         }) { NavigationStack { MapLayerSettingsView() }.preferredColorScheme(.dark).tint(DS.Color.accent) }
         .onChange(of: hourOffset) { _, _ in rebuildRaster() }
-        .onChange(of: services.gridForecast.loading) { _, loading in if !loading { rebuildRaster() } }
+        .onChange(of: services.gridForecast.version) { _, _ in rebuildRaster() }
         .onAppear {
             model.attach(services)
             if let first = model.cards.first(where: { $0.spot.coordinate.isPlausible }) {
@@ -112,8 +113,9 @@ struct SpotsView: View {
             region = context.region
             model.searchPorts(in: context.region)
             if layersOn {
-                services.gridForecast.ensure(center: Coordinate(latitude: context.region.center.latitude, longitude: context.region.center.longitude))
-                rebuildRaster()
+                ensureTiles(for: context.region)
+                // 読み込み済みの範囲の中なら作り直さない（枠が動かない）。外に出たら作り直す
+                if let r = raster, !r.box.contains(region: context.region) { rebuildRaster() } else if raster == nil { rebuildRaster() }
             }
         }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
@@ -134,25 +136,42 @@ struct SpotsView: View {
     private func toggleLayers() {
         layersOn.toggle()
         guard layersOn else { raster = nil; return }
+        MapLayerSettings.usedOnce = true
         if !MapLayerSettings.isEnabled(layer), let first = MapLayerSettings.enabled.first { layer = first }
         if let region {
-            services.gridForecast.ensure(center: Coordinate(latitude: region.center.latitude, longitude: region.center.longitude))
+            ensureTiles(for: region)
         } else if let c = model.currentLocation ?? model.cards.first?.spot.coordinate {
-            services.gridForecast.ensure(center: c)
+            services.gridForecast.ensure(minLat: c.latitude - 0.2, maxLat: c.latitude + 0.2, minLon: c.longitude - 0.25, maxLon: c.longitude + 0.25)
         }
         rebuildRaster()
     }
 
-    /// 表示範囲（少し広げる）に対して色面と流れの格子を作り直す
-    private func rebuildRaster() {
-        guard layersOn, let region else { raster = nil; return }
-        let grid = layer.isMarine ? services.gridForecast.marine : services.gridForecast.weather
-        guard let grid, !grid.isEmpty else { raster = nil; return }
+    /// 表示範囲＋周り 1 周のタイルを用意する
+    private func ensureTiles(for region: MKCoordinateRegion) {
         let half = region.span.latitudeDelta / 2, halfLon = region.span.longitudeDelta / 2
-        let box = GeoBox(minLat: region.center.latitude - half, maxLat: region.center.latitude + half,
-                         minLon: region.center.longitude - halfLon, maxLon: region.center.longitude + halfLon).expanded(by: 0.3)
+        services.gridForecast.ensure(minLat: region.center.latitude - half, maxLat: region.center.latitude + half,
+                                     minLon: region.center.longitude - halfLon, maxLon: region.center.longitude + halfLon)
+    }
+
+    /// 読み込み済みタイル全体（表示範囲の周り 1 周を含む）に対して色面と流れの格子を作る。裏で計算して差し替える
+    private func rebuildRaster() {
+        guard layersOn, let region, let grid = services.gridForecast.mosaic(marine: layer.isMarine), !grid.isEmpty,
+              let lat = grid.latitudeRange, let lon = grid.longitudeRange else { raster = nil; return }
+        // 表示範囲の 3 倍までに絞る（遠くまで読み込んでいても画像が巨大にならないように）
+        let half = region.span.latitudeDelta * 1.5, halfLon = region.span.longitudeDelta * 1.5
+        let box = GeoBox(minLat: max(lat.lowerBound, region.center.latitude - half), maxLat: min(lat.upperBound, region.center.latitude + half),
+                         minLon: max(lon.lowerBound, region.center.longitude - halfLon), maxLon: min(lon.upperBound, region.center.longitude + halfLon))
+        guard box.maxLat > box.minLat, box.maxLon > box.minLon else { raster = nil; return }
         let time = layerStart.addingTimeInterval(Double(hourOffset) * 3600)
-        raster = FieldRaster.build(grid: grid, layer: layer, time: time, box: box, opacity: MapLayerSettings.opacity)
+        let l = layer, opacity = MapLayerSettings.opacity
+        // 画素数は 1° あたり 320（上限 800）
+        let width = min(800, max(120, Int((box.maxLon - box.minLon) * 320))), height = min(800, max(120, Int((box.maxLat - box.minLat) * 420)))
+        rasterTask?.cancel()
+        rasterTask = Task.detached(priority: .userInitiated) {
+            let r = FieldRaster.build(grid: grid, layer: l, time: time, box: box, opacity: opacity, width: width, height: height)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { raster = r }
+        }
     }
 
     private func roundButton(_ symbol: String, action: @escaping () -> Void) -> some View {
