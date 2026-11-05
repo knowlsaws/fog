@@ -87,7 +87,7 @@ final class HomeViewModel {
     struct DayData { let timeline: [ScorePoint]; let tide: [TidePoint]; let extremes: [TideExtreme] }
 
     /// 1 日分の推移・潮位曲線・満干を計算する（純粋な計算。約 50 ms）
-    struct DayCalculator {
+    struct DayCalculator: Sendable {
         let engine: ScoreEngine
         let builder: EnvSnapshotBuilder
         let inputs: EnvSnapshotBuilder.Inputs
@@ -221,6 +221,39 @@ final class HomeViewModel {
         WidgetSync.publish(spotName: spot?.name ?? "現在地", timeline: timeline, tide: tide, events: widgetEvents, isRecording: isRecording, tackle: services.capture.currentTackle,
                            envAt: { env.snapshot(at: $0, coordinate: coordinate) })
         PeakNotifier.schedule(points: timeline, spot: spot, now: now, timeZone: timeZone)
+        // 明日のベストタイム（F-28）：明日 1 日分から
+        let tomorrow = dayData(1)
+        DailyBriefNotifier.schedule(points: tomorrow.timeline, extremes: tomorrow.extremes, spot: spot, coordinate: coordinate,
+                                    airTemperatureAt: { env.snapshot(at: $0, coordinate: coordinate).airTemperatureC }, now: now, timeZone: timeZone)
+        // 安全通知（F-36）：釣行中だけ予約し直す（帰る時間の設定変更を反映するため）
+        if isRecording { SafetyNotifier.schedule(at: now, coordinate: coordinate, environment: env, timeZone: timeZone) }
+    }
+
+    // MARK: 年間カレンダー（F-33）
+
+    /// 今月から 12 か月分の「日ごとの最高釣れ率」。1 時間刻みで裏で計算し、月ごとに `progress` に渡す。
+    /// 予報の先は天気なし（潮・光・月の要素だけ）になるので、潮回りの良し悪しが主に出る
+    func yearHeat(progress: @escaping @MainActor ([Date: Int]) -> Void) -> Task<Void, Never>? {
+        guard let calc else { return nil }
+        let tz = timeZone
+        let cal: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = tz; return c }()
+        let comps = cal.dateComponents([.year, .month], from: now)
+        guard let monthStart = cal.date(from: comps) else { return nil }
+        return Task.detached(priority: .userInitiated) {
+            var acc: [Date: Int] = [:]
+            for m in 0..<12 {
+                guard !Task.isCancelled, let start = cal.date(byAdding: .month, value: m, to: monthStart),
+                      let end = cal.date(byAdding: .month, value: 1, to: start) else { return }
+                let points = ScoreTimeline.compute(engine: calc.engine, coordinate: calc.coordinate, from: start, to: end.addingTimeInterval(-1), stepMinutes: 60, timeZone: tz) { t in
+                    var e = calc.builder.build(at: t, coordinate: calc.coordinate, inputs: calc.inputs, tide: calc.tide, extremes: [])
+                    if let h = calc.horizon, t > h { e.isForecast = true }
+                    return e
+                }
+                acc.merge(ScoreTimeline.dailyMax(points, timeZone: tz)) { max($0, $1) }
+                let snapshot = acc
+                await progress(snapshot)
+            }
+        }
     }
 
     /// チップ詳細の「再取得」：1 時間の間隔制限を無視して気象・海況を取りに行く。

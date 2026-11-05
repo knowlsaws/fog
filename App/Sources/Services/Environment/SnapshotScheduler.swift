@@ -11,6 +11,9 @@ final class SnapshotScheduler {
     private let environment: EnvironmentService
     private let store: FogStore
     private var timer: Timer?
+    private var pressureTimer: Timer?
+    /// 気圧ログ（F-35）の間隔
+    static let pressureInterval: TimeInterval = 5 * 60
     private(set) var activeSessionID: UUID?
     private(set) var lastSnapshotAt: Date?
     var currentCoordinate: Coordinate?
@@ -28,14 +31,31 @@ final class SnapshotScheduler {
         timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.record(reason: .periodic) }
         }
+        pressureTimer?.invalidate()
+        pressureTimer = Timer.scheduledTimer(withTimeInterval: Self.pressureInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.logPressure() }
+        }
         Task { await record(reason: .sessionStart) }
     }
 
     func stop() {
+        logPressure()
         timer?.invalidate()
         timer = nil
+        pressureTimer?.invalidate()
+        pressureTimer = nil
         environment.barometer.stop()
         activeSessionID = nil
+    }
+
+    /// 端末気圧計の最新値を釣行に 1 点追加する（F-35）。気圧計が無い端末や値が無いときは何もしない
+    func logPressure(at date: Date = .now) {
+        guard let id = activeSessionID, let latest = environment.barometer.latest, var session = try? store.session(id: id) else { return }
+        var log = session.pressureLog ?? []
+        if let last = log.last, date.timeIntervalSince(last.at) < Self.pressureInterval - 30 { return }
+        log.append(PressureSample(at: date, pressureHPa: latest.pressureHPa))
+        session.pressureLog = log
+        try? store.upsert(session)
     }
 
     enum Reason { case sessionStart, periodic, catchEvent }

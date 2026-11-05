@@ -54,6 +54,8 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
     public var isAutoDetected: Bool
     public var activity: ActivitySummary?
     public var report: SessionReport?
+    /// 釣行中の端末気圧計の記録（5 分ごと。F-35）。古いデータは nil
+    public var pressureLog: [PressureSample]?
 
     public init(
         id: UUID = UUID(),
@@ -69,7 +71,8 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
         tackleID: UUID? = nil,
         isAutoDetected: Bool = true,
         activity: ActivitySummary? = nil,
-        report: SessionReport? = nil
+        report: SessionReport? = nil,
+        pressureLog: [PressureSample]? = nil
     ) {
         self.id = id
         self.spotID = spotID
@@ -85,6 +88,7 @@ public struct Session: Codable, Identifiable, Hashable, Sendable {
         self.isAutoDetected = isAutoDetected
         self.activity = activity
         self.report = report
+        self.pressureLog = pressureLog
     }
 
     /// ボウズ。

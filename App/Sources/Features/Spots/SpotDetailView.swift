@@ -18,7 +18,7 @@ struct SpotDetailView: View {
         GeometryReader { geo in
             VStack(spacing: DS.Spacing.m) {
                 ZStack(alignment: .topTrailing) {
-                    heatmap.frame(height: geo.size.height * 0.5)
+                    heatmap.frame(height: geo.size.height * 0.38)
                     Menu {
                         Button("名前を変える") { newName = card.spot.name; renaming = true }
                         Button("削除", role: .destructive) { confirmDelete = true }
@@ -57,6 +57,7 @@ struct SpotDetailView: View {
                             Spacer()
                         }
                     }
+                    briefing
                 }
                 .padding(.horizontal, DS.Spacing.l)
                 Spacer(minLength: 0)
@@ -72,6 +73,57 @@ struct SpotDetailView: View {
         .confirmationDialog("この釣り場と釣行を削除", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("削除", role: .destructive) { try? services.store.deleteSpot(id: card.spot.id); dismiss() }
             Button("キャンセル", role: .cancel) {}
+        }
+    }
+
+    /// 遠征の下調べ（F-37）：これから 30 日の潮回り（大潮ほど濃い）と、この釣り場で今の季節に釣れた魚
+    private var briefing: some View {
+        let tz = TimeZone(identifier: "Asia/Tokyo") ?? .current
+        let cal: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = tz; return c }()
+        let days = TideCalendar.days(from: Date(), days: 30, timeZone: tz)
+        let thisMonth = cal.component(.month, from: Date())
+        let months = [thisMonth, thisMonth % 12 + 1]
+        let catches = sessions.flatMap(\.catches)
+        return VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            Text("下調べ · 30 日の潮回り").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+            HStack(spacing: 2) {
+                ForEach(days, id: \.dayStart) { d in
+                    let c = cal.dateComponents([.year, .month, .day, .weekday], from: d.dayStart)
+                    let holiday = c.weekday == 1 || JapaneseHolidays.isHoliday(year: c.year ?? 0, month: c.month ?? 0, day: c.day ?? 0)
+                    VStack(spacing: 1) {
+                        Text("\(c.day ?? 0)").font(.system(size: 7, weight: .semibold, design: .rounded))
+                            .foregroundStyle(holiday ? DS.Color.holiday : (c.weekday == 7 ? DS.Color.saturday : DS.Color.textTertiary))
+                        RoundedRectangle(cornerRadius: 2).fill(DS.Color.sea.opacity(Self.tideOpacity(d.tideName))).frame(height: 14)
+                            .overlay(Text(String(d.tideName.rawValue.prefix(1))).font(.system(size: 7)).foregroundStyle(.white.opacity(0.9)))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            ForEach(months, id: \.self) { m in
+                let inMonth = catches.filter { cal.component(.month, from: $0.at) == m }
+                let counts = Dictionary(grouping: inMonth, by: \.species).map { ($0.key, $0.value.count) }.sorted { $0.1 > $1.1 }.prefix(4)
+                HStack(spacing: DS.Spacing.s) {
+                    Text("\(m)月").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).frame(width: 28, alignment: .leading)
+                    if counts.isEmpty {
+                        Text("まだ釣果なし").font(DS.Font.caption).foregroundStyle(DS.Color.faded)
+                    } else {
+                        ForEach(Array(counts.enumerated()), id: \.offset) { _, item in
+                            Text("\(item.0) \(item.1)").font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
+                        }
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    static func tideOpacity(_ name: TideName) -> Double {
+        switch name {
+        case .spring: return 0.95
+        case .middle: return 0.6
+        case .neap: return 0.3
+        case .long: return 0.22
+        case .young: return 0.26
         }
     }
 

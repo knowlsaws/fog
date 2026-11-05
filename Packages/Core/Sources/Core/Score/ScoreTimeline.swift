@@ -66,3 +66,24 @@ public enum ScoreTimeline {
         return peaks
     }
 }
+
+    /// 1 日の最良の時間帯：70 以上が続く区間のうち最高点のもの。無ければ最高点の前後 1 時間。
+    public static func bestWindow(_ points: [ScorePoint]) -> Peak? {
+        if let best = peaks(points, threshold: 70).max(by: { $0.maxScore < $1.maxScore }) { return best }
+        guard let top = points.max(by: { $0.score < $1.score }) else { return nil }
+        let start = points.first { $0.at >= top.at.addingTimeInterval(-3600) }?.at ?? top.at
+        let end = points.last { $0.at <= top.at.addingTimeInterval(3600) }?.at ?? top.at
+        return Peak(start: start, end: end, maxScore: top.score, maxAt: top.at)
+    }
+
+    /// 日ごとの最高点（キーはその日の 0 時）。
+    public static func dailyMax(_ points: [ScorePoint], timeZone: TimeZone = TimeZone(identifier: "Asia/Tokyo") ?? .current) -> [Date: Int] {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
+        var out: [Date: Int] = [:]
+        for p in points {
+            let day = cal.startOfDay(for: p.at)
+            out[day] = max(out[day] ?? 0, p.score)
+        }
+        return out
+    }
+}
