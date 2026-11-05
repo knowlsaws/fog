@@ -36,14 +36,17 @@ public struct WidgetSnapshot: Codable, Hashable, Sendable {
     public var events: [Event]
     public var isRecording: Bool
     public var tackle: TackleKind?
+    /// 今の立ち位置が過去に針を失ったメッシュ（F-39）。古い JSON は nil
+    public var isSnagZone: Bool?
 
-    public init(generatedAt: Date = .now, spotName: String, points: [Point], events: [Event], isRecording: Bool, tackle: TackleKind? = nil) {
+    public init(generatedAt: Date = .now, spotName: String, points: [Point], events: [Event], isRecording: Bool, tackle: TackleKind? = nil, isSnagZone: Bool? = nil) {
         self.generatedAt = generatedAt
         self.spotName = spotName
         self.points = points.sorted { $0.at < $1.at }
         self.events = events.sorted { $0.at < $1.at }
         self.isRecording = isRecording
         self.tackle = tackle
+        self.isSnagZone = isSnagZone
     }
 
     /// `date` 時点の値（直前の点）。範囲外なら端の点。

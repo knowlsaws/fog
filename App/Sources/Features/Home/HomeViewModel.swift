@@ -75,6 +75,12 @@ final class HomeViewModel {
         var available: Bool { maxScore != nil }
     }
     private(set) var weekOutlook: [DayOutlook] = []
+    /// 釣果情報（F-27）の 1 行
+    private(set) var feedHeadline: FeedItem?
+    /// 記録中の釣行（F-38 ライブ画面）
+    private(set) var liveSession: Core.Session?
+    private(set) var liveNextTide: TideExtreme?
+    private(set) var liveNextTwilight: (label: String, at: Date)?
 
     private var services: AppServices?
     private let cache = AnalysisCache()
@@ -139,6 +145,7 @@ final class HomeViewModel {
         let allSpots = (try? store.spots()) ?? []
         let active = sessions.first { s in s.isActive && (allSpots.first { $0.id == s.spotID }?.coordinate.isPlausible ?? false) }
         isRecording = active != nil
+        liveSession = active
 
         // 釣り場：記録中の釣行 → 選択中 → 現在地に最も近い登録釣り場 → 直近の釣行の釣り場
         // 位置が無い（0, 0）釣り場はホームの対象にしない
@@ -227,13 +234,42 @@ final class HomeViewModel {
                                     airTemperatureAt: { env.snapshot(at: $0, coordinate: coordinate).airTemperatureC }, now: now, timeZone: timeZone)
         // 安全通知（F-36）：釣行中だけ予約し直す（帰る時間の設定変更を反映するため）
         if isRecording { SafetyNotifier.schedule(at: now, coordinate: coordinate, environment: env, timeZone: timeZone) }
+        // ライブ画面（F-38）：次の満干と次のマズメ
+        liveNextTide = tideExtremes.first { $0.at > now }
+        liveNextTwilight = Self.nextTwilight(now: now, coordinate: coordinate, timeZone: timeZone)
+        // 釣果情報（F-27）：取得は裏で、1 行は手元の記事から
+        let keywords = feedKeywords(sessions: sessions, spots: allSpots)
+        feedHeadline = services.feeds.headline(keywords: keywords)
+        let feeds = services.feeds
+        Task { [weak self] in
+            await feeds.refreshIfNeeded(now: now)
+            self?.feedHeadline = feeds.headline(keywords: keywords)
+        }
+    }
+
+    /// 記事の関連付けに使う語：釣った魚種・登録釣り場の名前
+    func feedKeywords(sessions: [Core.Session]? = nil, spots: [Spot]? = nil) -> [String] {
+        let sessions = sessions ?? ((try? services?.store.sessions()) ?? [])
+        let spots = spots ?? ((try? services?.store.spots()) ?? [])
+        let species = Set(sessions.flatMap(\.catches).map(\.species)).filter { !$0.isEmpty }
+        let names = spots.filter(\.isRegistered).map(\.name).filter { $0.count >= 2 && $0 != "釣り場" }
+        return Array(species) + names
+    }
+
+    /// 次のマズメ（朝マズメは市民薄明の始まり、夕マズメは日の入 30 分前）
+    static func nextTwilight(now: Date, coordinate: Coordinate, timeZone: TimeZone) -> (label: String, at: Date)? {
+        let sun = SunCalculator.times(on: now, at: coordinate, timeZone: timeZone)
+        let tomorrow = SunCalculator.times(on: now.addingTimeInterval(86_400), at: coordinate, timeZone: timeZone)
+        let candidates: [(String, Date)] = [sun.civilDawn.map { ("朝マズメ", $0) }, sun.sunset.map { ("夕マズメ", $0.addingTimeInterval(-30 * 60)) }, tomorrow.civilDawn.map { ("朝マズメ", $0) }]
+            .compactMap { $0 }.filter { $0.1 > now }
+        return candidates.min { $0.1 < $1.1 }.map { (label: $0.0, at: $0.1) }
     }
 
     // MARK: 年間カレンダー（F-33）
 
     /// 今月から 12 か月分の「日ごとの最高釣れ率」。1 時間刻みで裏で計算し、月ごとに `progress` に渡す。
     /// 予報の先は天気なし（潮・光・月の要素だけ）になるので、潮回りの良し悪しが主に出る
-    func yearHeat(progress: @escaping @MainActor ([Date: Int]) -> Void) -> Task<Void, Never>? {
+    func yearHeat(species: String? = nil, progress: @escaping @MainActor ([Date: Int]) -> Void) -> Task<Void, Never>? {
         guard let calc else { return nil }
         let tz = timeZone
         let cal: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = tz; return c }()
@@ -244,7 +280,7 @@ final class HomeViewModel {
             for m in 0..<12 {
                 guard !Task.isCancelled, let start = cal.date(byAdding: .month, value: m, to: monthStart),
                       let end = cal.date(byAdding: .month, value: 1, to: start) else { return }
-                let points = ScoreTimeline.compute(engine: calc.engine, coordinate: calc.coordinate, from: start, to: end.addingTimeInterval(-1), stepMinutes: 60, timeZone: tz) { t in
+                let points = ScoreTimeline.compute(engine: calc.engine, coordinate: calc.coordinate, from: start, to: end.addingTimeInterval(-1), stepMinutes: 60, species: species, timeZone: tz) { t in
                     var e = calc.builder.build(at: t, coordinate: calc.coordinate, inputs: calc.inputs, tide: calc.tide, extremes: [])
                     if let h = calc.horizon, t > h { e.isForecast = true }
                     return e

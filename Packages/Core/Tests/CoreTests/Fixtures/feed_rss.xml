@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel>
+<title>函館釣り情報</title>
+<link>https://example.com/</link>
+<item>
+<title>函館港でアイナメ好調</title>
+<link>https://example.com/a1</link>
+<guid>a1</guid>
+<pubDate>Wed, 04 Nov 2026 09:00:00 +0900</pubDate>
+<description><![CDATA[<p>朝マズメに<b>アイナメ</b>が連発。40cm超えも。</p>]]></description>
+</item>
+<item>
+<title>七重浜でカレイ</title>
+<link>https://example.com/a2</link>
+<pubDate>Tue, 03 Nov 2026 18:30:00 +0900</pubDate>
+<description>投げ釣りでカレイ。</description>
+</item>
+</channel>
+</rss>

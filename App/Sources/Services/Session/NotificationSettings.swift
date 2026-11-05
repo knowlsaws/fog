@@ -3,7 +3,7 @@ import Foundation
 /// 通知の種類ごとのオンオフ（§8）。既定はすべてオン。
 enum NotificationSettings {
     enum Kind: String, CaseIterable, Identifiable {
-        case sessionStart, sessionEnd, record, peak, dailyBrief, safety
+        case sessionStart, sessionEnd, record, peak, dailyBrief, safety, snag, inventory
         var id: String { rawValue }
 
         var title: String {
@@ -14,6 +14,8 @@ enum NotificationSettings {
             case .peak: return "釣れ率ピーク"
             case .dailyBrief: return "明日のベストタイム"
             case .safety: return "安全"
+            case .snag: return "根掛かり注意"
+            case .inventory: return "在庫"
             }
         }
 
@@ -25,6 +27,8 @@ enum NotificationSettings {
             case .peak: return "今日のピークが 80 以上のとき、1 時間前に 1 回"
             case .dailyBrief: return "毎晩 20 時に、明日の最良の時間帯を 1 通（ホームの釣り場）"
             case .safety: return "釣行中：日の入り 30 分前・満潮 1 時間前・帰る時間"
+            case .snag: return "釣行中：過去に針を失った場所に入ったとき"
+            case .inventory: return "針ロストで在庫がしきい値を下回ったとき"
             }
         }
 

@@ -76,33 +76,11 @@ struct SessionDetailView: View {
         }
     }
 
-    /// 釣行の時間範囲の推移を計算する。気象は予報キャッシュか、無ければ釣行中に保存したスナップショットから
+    /// 釣行の時間範囲の推移を計算する（`SessionReviewer`）
     private func computeReview() {
-        let env = services.environment
-        let coordinate = (try? services.store.spot(id: session.spotID))?.coordinate ?? session.snapshots.first?.coordinate ?? session.catches.first?.coordinate
-        guard let coordinate, coordinate.isPlausible else { return }
-        let end = session.endedAt ?? Date()
-        let from = session.startedAt.addingTimeInterval(-3600), to = end.addingTimeInterval(3600)
-        var inputs = env.inputs(for: coordinate)
-        if !inputs.weather.contains(where: { $0.at >= from && $0.at <= to }) {
-            inputs.weather = session.snapshots.map { e in
-                WeatherSample(at: e.at, airTemperatureC: e.airTemperatureC, humidity: e.humidity, conditionCode: e.conditionCode, windSpeedMS: e.windSpeedMS,
-                              windGustMS: e.windGustMS, windDirectionDeg: e.windDirectionDeg, pressureHPa: e.pressureHPa, cloudCover: e.cloudCover,
-                              precipitationMM: e.precipitationMM, visibilityM: e.visibilityM, isForecast: e.isForecast)
-            }
-        }
-        let sessions = (try? services.store.sessions()) ?? []
-        let spots = (try? services.store.spots()) ?? []
-        let personal = PersonalModel.learn(from: sessions.filter { !$0.isActive && $0.id != session.id }, coordinateOf: { s in spots.first { $0.id == s.spotID }?.coordinate })
-        let engine = ScoreEngine(personal: personal.total.hours >= 1 ? personal : nil)
-        let tide = env.tideStation(near: coordinate).map { TideEngine(station: $0) }
-        let extremes = tide?.extremes(from: from.addingTimeInterval(-6 * 3600), to: to.addingTimeInterval(6 * 3600)) ?? []
-        let builder = env.builder(for: coordinate)
-        let tz = TimeZone(identifier: "Asia/Tokyo") ?? .current
-        reviewPoints = ScoreTimeline.compute(engine: engine, coordinate: coordinate, from: from, to: to, stepMinutes: 15, timeZone: tz) { t in
-            builder.build(at: t, coordinate: coordinate, inputs: inputs, tide: tide, extremes: extremes)
-        }
-        review = SessionReview.evaluate(points: reviewPoints, catchTimes: session.catches.map(\.at), from: session.startedAt, to: end)
+        guard let out = SessionReviewer.review(session, services: services) else { return }
+        reviewPoints = out.points
+        review = out.result
     }
 
     /// 現場の気圧（F-35）：釣行中に端末の気圧計で 5 分ごとに記録した値

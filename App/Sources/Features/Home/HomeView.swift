@@ -10,16 +10,21 @@ struct HomeView: View {
     @State private var showSpots = false
     @State private var showSettings = false
     @State private var showMoon = false
+    @State private var showFeed = false
     @State private var chipDetail: HomeViewModel.Chip?
 
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
                 header.frame(height: geo.size.height * 0.08)
-                scoreArea.frame(height: geo.size.height * 0.20)
+                Group {
+                    if model.isRecording, let live = model.liveSession { livePanel(live) } else { scoreArea }
+                }
+                .frame(height: geo.size.height * 0.20)
                 chipsRow.frame(height: geo.size.height * 0.12)
-                ForecastChart(model: model).frame(height: geo.size.height * 0.585)
-                    .padding(.top, DS.Spacing.s)
+                feedLine.frame(height: geo.size.height * 0.03)
+                ForecastChart(model: model).frame(height: geo.size.height * 0.555)
+                    .padding(.top, DS.Spacing.xs)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, DS.Spacing.l)
@@ -45,6 +50,69 @@ struct HomeView: View {
         .sheet(item: $chipDetail) { ChipDetailSheet(chip: $0, model: model).presentationDetents([.medium]) }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showMoon) { MoonSheet(model: model).presentationDetents([.medium]) }
+        .sheet(isPresented: $showFeed) { FeedView(keywords: model.feedKeywords()).presentationDetents([.large]) }
+    }
+
+    // MARK: 釣果情報（F-27）の 1 行。タップで一覧
+
+    private var feedLine: some View {
+        Button { showFeed = true } label: {
+            HStack(spacing: DS.Spacing.xs) {
+                Image(systemName: "newspaper").font(.system(size: 10, weight: .semibold)).foregroundStyle(DS.Color.accent)
+                if let h = model.feedHeadline {
+                    Text(h.title).font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary).lineLimit(1)
+                } else {
+                    Text(services.feeds.urls.isEmpty ? "釣果情報：設定 > 情報源 で RSS を登録" : "釣果情報を取得中").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, DS.Spacing.xs)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: 釣行中のライブ画面（F-38）：経過・尾数・直近の釣果・次の変化
+
+    private func livePanel(_ live: Core.Session) -> some View {
+        let last = live.catches.max { $0.at < $1.at }
+        return HStack(spacing: DS.Spacing.m) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("釣行中").font(DS.Font.caption).foregroundStyle(DS.Color.accent)
+                Text(HomeViewModel.hm(model.now.timeIntervalSince(live.startedAt))).font(DS.Font.score(40)).foregroundStyle(DS.Color.textPrimary)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(live.catches.count)").font(DS.Font.number(22)).foregroundStyle(DS.Color.textPrimary)
+                    Text("尾").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                    if let last {
+                        Text("直近 \(HomeViewModel.clock(last.at, timeZone: model.timeZone)) \(last.species.isEmpty ? "魚" : last.species)" + (last.lengthCm.map { " \(Int($0.rounded()))cm" } ?? ""))
+                            .font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary).lineLimit(1)
+                    }
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 6) {
+                Button { showBreakdown = true } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text("\(model.score?.score ?? 0)").font(DS.Font.score(30)).foregroundStyle(DS.Color.accent)
+                        Text("釣れ率").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+                if let t = model.liveNextTide {
+                    liveCountdown(t.kind == .high ? "満潮" : "干潮", t.at, color: DS.Color.sea)
+                }
+                if let m = model.liveNextTwilight {
+                    liveCountdown(m.label, m.at, color: DS.Color.sun)
+                }
+            }
+        }
+        .padding(.vertical, DS.Spacing.s)
+    }
+
+    private func liveCountdown(_ label: String, _ at: Date, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Text(label).font(DS.Font.caption).foregroundStyle(color)
+            Text("まで \(HomeViewModel.hm(at.timeIntervalSince(model.now)))").font(DS.Font.number(13)).foregroundStyle(DS.Color.textPrimary)
+        }
     }
 
     // MARK: ヘッダー

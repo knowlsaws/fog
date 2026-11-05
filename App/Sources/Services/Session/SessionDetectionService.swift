@@ -15,6 +15,8 @@ final class SessionDetectionService {
     private(set) var activeSessionID: UUID?
     private(set) var activeSpotName: String?
     private var lastEndedSessionID: UUID?
+    /// 根掛かり注意（F-39）：直近に知らせたメッシュ
+    private var snagMeshKey: String?
 
     private let location: LocationService
     private let store: FogStore
@@ -162,6 +164,7 @@ final class SessionDetectionService {
         onSessionEnded?(id)
         scheduler.stop()
         SafetyNotifier.cancel()
+        if snagMeshKey != nil { snagMeshKey = nil; WidgetSync.setSnagZone(false) }
         location.startMonitoring()
         lastEndedSessionID = id
         activeSessionID = nil
@@ -179,6 +182,22 @@ final class SessionDetectionService {
         let key = Mesh.key(for: sample.coordinate)
         if let points = try? store.points(spotID: session.spotID), !points.contains(where: { $0.meshKey == key }) {
             try? store.upsert(Point(spotID: session.spotID, coordinate: Mesh.center(for: sample.coordinate), meshKey: key, createdAt: sample.at))
+        }
+        warnSnag(meshKey: key, spotID: session.spotID)
+    }
+
+    /// 根掛かり注意（F-39）：過去に針を失ったメッシュに入ったら 1 回知らせ、ウィジェットの背景を変える。出たら戻す
+    private func warnSnag(meshKey: String, spotID: UUID) {
+        guard meshKey != snagMeshKey else { return }
+        let losses = Analytics.spotStats(sessions: (try? store.sessions(spotID: spotID)) ?? []).hookLossHeatmap[meshKey] ?? 0
+        let wasSnag = snagMeshKey != nil
+        if losses > 0 {
+            snagMeshKey = meshKey
+            SessionNotifications.snag(losses: losses, meshKey: meshKey)
+            WidgetSync.setSnagZone(true)
+        } else if wasSnag {
+            snagMeshKey = nil
+            WidgetSync.setSnagZone(false)
         }
     }
 

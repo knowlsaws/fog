@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 import Core
 
 extension GuideEntry: Identifiable {
@@ -136,7 +137,7 @@ struct SpeciesDetailView: View {
                     LinearGradient(colors: [.clear, DS.Color.background], startPoint: .center, endPoint: .bottom)
                     Text(entry.species).font(DS.Font.number(28)).foregroundStyle(DS.Color.textPrimary).padding(DS.Spacing.l)
                 }
-                .frame(height: geo.size.height * 0.45).clipped()
+                .frame(height: geo.size.height * 0.36).clipped()
                 HStack(spacing: DS.Spacing.l) {
                     stat(entry.maxLengthCm.map { "\(Int($0.rounded()))" } ?? "—", "cm 最大")
                     stat("\(entry.count)", "尾")
@@ -144,6 +145,7 @@ struct SpeciesDetailView: View {
                     stat(entry.lastCaughtAt.formatted(.dateTime.month().day()), "最後")
                 }
                 .padding(.horizontal, DS.Spacing.l)
+                sizeTrend.padding(.horizontal, DS.Spacing.l)
                 HStack(spacing: DS.Spacing.m) {
                     distribution("時間帯", entry.conditions.byLight)
                     distribution("潮", entry.conditions.byTide)
@@ -184,6 +186,31 @@ struct SpeciesDetailView: View {
         .background(DS.Color.background)
         .onAppear(perform: reload)
         .sheet(item: $editing) { c in CatchEditSheet(catchItem: c) { reload() }.presentationDetents([.medium]) }
+    }
+
+    /// サイズの推移（F-41）：計測した釣果を時系列に。自己記録の更新は白い点
+    private var sizeTrend: some View {
+        let measured = catches.filter { $0.lengthCm != nil }.sorted { $0.at < $1.at }
+        var best = 0.0
+        let records: Set<UUID> = Set(measured.compactMap { c -> UUID? in
+            guard let l = c.lengthCm else { return nil }
+            if l > best { best = l; return c.id }
+            return nil
+        })
+        return Group {
+            if measured.count >= 2 {
+                Chart(measured, id: \.id) { c in
+                    LineMark(x: .value("日", c.at), y: .value("cm", c.lengthCm ?? 0)).foregroundStyle(DS.Color.accent.opacity(0.7))
+                    PointMark(x: .value("日", c.at), y: .value("cm", c.lengthCm ?? 0))
+                        .foregroundStyle(records.contains(c.id) ? Color.white : DS.Color.accent).symbolSize(records.contains(c.id) ? 40 : 20)
+                }
+                .chartYAxis { AxisMarks(position: .leading) { _ in AxisValueLabel().font(.system(size: 9)).foregroundStyle(DS.Color.textTertiary) } }
+                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisValueLabel(format: .dateTime.month().day()).font(.system(size: 9)).foregroundStyle(DS.Color.textTertiary) } }
+                .frame(height: 64)
+            } else {
+                Text("サイズを 2 尾以上計測すると推移が出ます").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 
     private func reload() {
