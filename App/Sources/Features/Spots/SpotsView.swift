@@ -72,7 +72,7 @@ struct SpotsView: View {
         .onChange(of: services.gridForecast.version) { _, _ in rebuildRaster() }
         .onAppear {
             model.attach(services)
-            if feedPinsOn { feedPins = model.feedPins() }
+            if feedPinsOn { feedPins = model.feedPins(); Task { await services.feeds.refreshIfNeeded() } }
             if let first = model.cards.first(where: { $0.spot.coordinate.isPlausible }) {
                 selectedID = first.spot.id
                 camera = .region(region(for: first.spot.coordinate))
@@ -89,7 +89,7 @@ struct SpotsView: View {
         .sheet(item: $detail) { SpotDetailView(card: $0).onDisappear { model.refresh() } }
         .sheet(isPresented: $showCompare) { SpotCompareSheet(model: model).presentationDetents([.large]) }
         .sheet(item: $feedPin) { FeedPinSheet(pin: $0).presentationDetents([.medium, .large]) }
-        .onChange(of: services.feeds.items.count) { _, _ in if feedPinsOn { feedPins = model.feedPins() } }
+        .onChange(of: services.feeds.revision) { _, _ in if feedPinsOn { feedPins = model.feedPins() } }
         .sheet(isPresented: $showSearch) { SpotSearchSheet { item in
             showSearch = false
             camera = .region(MKCoordinateRegion(center: item.placemark.coordinate, latitudinalMeters: 3000, longitudinalMeters: 3000))
