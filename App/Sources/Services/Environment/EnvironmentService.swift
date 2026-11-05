@@ -85,6 +85,11 @@ final class EnvironmentService {
         builder(for: coordinate).build(at: date, coordinate: coordinate, inputs: inputs(for: coordinate))
     }
 
+    /// 気象・海況だけのスナップショット（潮汐の満干探索をしない。表や週行・ウィジェットのように潮が要らない所で使う。10 倍以上速い）
+    func weatherSnapshot(at date: Date, coordinate: Coordinate) -> EnvSnapshot {
+        builder(for: coordinate).build(at: date, coordinate: coordinate, inputs: inputs(for: coordinate), tide: nil, extremes: [])
+    }
+
     /// 予報が届いている最後の時刻（ホームのグラフで線を薄くする境界）。
     func forecastHorizon(for coordinate: Coordinate) -> Date? { cache.weatherHorizon(for: coordinate) }
 

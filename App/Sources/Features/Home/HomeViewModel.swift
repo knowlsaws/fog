@@ -20,7 +20,7 @@ final class HomeViewModel {
         var text: String { label.isEmpty ? value : "\(label) \(value)" }
     }
 
-    struct TidePoint: Identifiable {
+    struct TidePoint: Identifiable, Sendable {
         let at: Date
         let levelCm: Double
         var id: Date { at }
@@ -90,7 +90,7 @@ final class HomeViewModel {
     /// 右軸の目盛りに使う潮位の範囲（1 か月）
     private(set) var tideRangeCm: ClosedRange<Double> = 0...200
 
-    struct DayData { let timeline: [ScorePoint]; let tide: [TidePoint]; let extremes: [TideExtreme] }
+    struct DayData: Sendable { let timeline: [ScorePoint]; let tide: [TidePoint]; let extremes: [TideExtreme] }
 
     /// 1 日分の推移・潮位曲線・満干を計算する（純粋な計算。約 50 ms）
     struct DayCalculator: Sendable {
@@ -116,6 +116,37 @@ final class HomeViewModel {
             }
             return DayData(timeline: timeline, tide: curve, extremes: extremes.filter { $0.at >= start && $0.at <= end })
         }
+    }
+
+    private var refreshingNetwork = false
+    private var lastWidgetKey = ""
+    private var lastWidgetPublishAt: Date = .distantPast
+
+    /// 画面に要る日：表示中の日、その週（月〜日）、ウィジェットの今日〜明後日
+    private func neededOffsets() -> [Int] {
+        let range = dayOffsetRange
+        let shown = min(max(dayOffset, range.lowerBound), range.upperBound)
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
+        let today = cal.startOfDay(for: now)
+        let weekday = cal.component(.weekday, from: today.addingTimeInterval(Double(shown) * 86_400))
+        let monday = shown - (weekday + 5) % 7
+        return Array(Set([shown, 0, 1, 2] + Array(monday...(monday + 6)))).filter { range.contains($0) }.sorted()
+    }
+
+    /// 足りない日を裏で計算してキャッシュに入れる
+    private func ensureDays(_ offsets: [Int]) async {
+        guard let calc else { return }
+        let missing = offsets.filter { dayCache[$0] == nil }
+        guard !missing.isEmpty else { return }
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = timeZone
+        let today = cal.startOfDay(for: now)
+        let key = timelineKey
+        let computed: [(Int, DayData)] = await Task.detached(priority: .userInitiated) {
+            missing.map { ($0, calc.compute(from: today.addingTimeInterval(Double($0) * 86_400))) }
+        }.value
+        // 計算中に場所や予報が変わっていたら捨てる
+        guard key == timelineKey else { return }
+        for (o, d) in computed { dayCache[o] = d }
     }
 
     /// オフセット日のデータ（キャッシュ）
@@ -173,7 +204,18 @@ final class HomeViewModel {
             PersonalModel.learn(from: sessions.filter { !$0.isActive }, coordinateOf: { s in spots.first { $0.id == s.spotID }?.coordinate }, timeZone: timeZone)
         }
         let engine = ScoreEngine(personal: personal.total.hours >= 1 ? personal : nil)
-        await env.refreshIfNeeded(at: coordinate, now: now)
+        // 通信を待たずに手元のキャッシュで先に描く。取れたら（予報の時刻が変わったら）もう一度計算する
+        let fetchedBefore = env.cache.entry(for: coordinate)?.weatherFetchedAt
+        let target = coordinate
+        if !refreshingNetwork {
+            refreshingNetwork = true
+            Task { [weak self] in
+                await env.refreshIfNeeded(at: target, now: now)
+                guard let self else { return }
+                self.refreshingNetwork = false
+                if env.cache.entry(for: target)?.weatherFetchedAt != fetchedBefore { await self.refresh() }
+            }
+        }
         let current = env.snapshot(at: now, coordinate: coordinate)
         score = engine.score(ScoreInput(at: now, coordinate: coordinate, env: current, timeZone: timeZone))
         moonAge = current.moonAge ?? MoonCalculator.age(at: now)
@@ -210,6 +252,8 @@ final class HomeViewModel {
                 if let lo = levels.min(), let hi = levels.max(), hi > lo { tideRangeCm = lo...hi }
             }
         }
+        // 表示に要る日（表示中の日・週行・ウィジェットの 3 日）を裏で先に計算してから画面を更新する（メインスレッドを止めない）
+        await ensureDays(neededOffsets())
         updateDay()
         updateWeekOutlook()
         let todayData = dayData(0)
@@ -224,9 +268,14 @@ final class HomeViewModel {
         events = ScoreEvents.upcoming(from: now, count: 3, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
 
         // ウィジェット（15 分更新）とピーク通知（§8）
-        let widgetEvents = ScoreEvents.upcoming(from: now, count: 16, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
-        WidgetSync.publish(spotName: spot?.name ?? "現在地", timeline: timeline, tide: tide, events: widgetEvents, isRecording: isRecording, tackle: services.capture.currentTackle,
-                           envAt: { env.snapshot(at: $0, coordinate: coordinate) })
+        // ウィジェットの書き出しは 10 分に 1 回（釣り場・記録中・予報・タックルが変わったときはすぐ）。毎 30 秒の再計算では書かない
+        let widgetKey = "\(spot?.id.uuidString ?? "current")|\(isRecording)|\(key)|\(services.capture.currentTackle?.rawValue ?? "")"
+        if widgetKey != lastWidgetKey || now.timeIntervalSince(lastWidgetPublishAt) > 600 {
+            lastWidgetKey = widgetKey; lastWidgetPublishAt = now
+            let widgetEvents = ScoreEvents.upcoming(from: now, count: 16, coordinate: coordinate, timeZone: timeZone, tideExtremes: tideExtremes, wind: wind)
+            WidgetSync.publish(spotName: spot?.name ?? "現在地", timeline: timeline, tide: tide, events: widgetEvents, isRecording: isRecording, tackle: services.capture.currentTackle,
+                               envAt: { env.weatherSnapshot(at: $0, coordinate: coordinate) })
+        }
         PeakNotifier.schedule(points: timeline, spot: spot, now: now, timeZone: timeZone)
         // 明日のベストタイム（F-28）：明日 1 日分から
         let tomorrow = dayData(1)
@@ -324,7 +373,7 @@ final class HomeViewModel {
         dayTide = data.tide
         dayExtremes = data.extremes
         if let services {
-            dayDetail = stride(from: 0, to: 24, by: 3).map { h in services.environment.snapshot(at: dayStart.addingTimeInterval(Double(h) * 3600), coordinate: coordinate) }
+            dayDetail = stride(from: 0, to: 24, by: 3).map { h in services.environment.weatherSnapshot(at: dayStart.addingTimeInterval(Double(h) * 3600), coordinate: coordinate) }
         }
         let noon = dayStart.addingTimeInterval(12 * 3600)
         daySun = SunCalculator.times(on: noon, at: coordinate, timeZone: timeZone)
@@ -350,7 +399,7 @@ final class HomeViewModel {
                 continue
             }
             let noon = start.addingTimeInterval(12 * 3600)
-            let cond = services.map { $0.environment.snapshot(at: noon, coordinate: coordinate).conditionCode } ?? nil
+            let cond = services.map { $0.environment.weatherSnapshot(at: noon, coordinate: coordinate).conditionCode } ?? nil
             let beyond = forecastHorizon.map { noon > $0 } ?? true
             out.append(DayOutlook(offset: offset, dayStart: start, maxScore: best, conditionCode: beyond ? nil : cond, weekday: ymd.weekday ?? 0, isHoliday: holiday))
         }
