@@ -108,16 +108,18 @@ struct SpotsView: View {
         Map(position: $camera, interactionModes: [.pan, .zoom]) {
             ForEach(model.allCards.filter { $0.spot.coordinate.isPlausible }) { card in
                 Annotation("", coordinate: card.spot.coordinate.cl, anchor: .center) {
-                    Button { selectedID = card.spot.id } label: {
-                        SpotMarker(card: card, selected: selectedID == card.spot.id, zoomedIn: zoomedIn)
-                    }
-                    .buttonStyle(.plain)
-                    // 同じ場所の釣果情報は点の上に載せる（重なって隠れないように。2026-11-05 実機フィードバック）
-                    .overlay(alignment: .top) {
-                        if let p = feedPin(for: card) {
+                    // 同じ場所の釣果情報は点の上に載せる。overlay で外にはみ出すとタップできないので、
+                    // 縦に並べて下に同じ高さの空白を置き、点の中心を座標に合わせる（2026-11-05 実機フィードバック）
+                    let badge = feedPin(for: card)
+                    VStack(spacing: 2) {
+                        if let p = badge {
                             Button { feedPin = p } label: { FeedPinMarker(pin: p) }.buttonStyle(.plain)
-                                .offset(y: zoomedIn ? -40 : -24)
                         }
+                        Button { selectedID = card.spot.id } label: {
+                            SpotMarker(card: card, selected: selectedID == card.spot.id, zoomedIn: zoomedIn)
+                        }
+                        .buttonStyle(.plain)
+                        if badge != nil { Color.clear.frame(height: FeedPinMarker.height + 2) }
                     }
                 }
             }
@@ -499,13 +501,15 @@ struct SpotCompareSheet: View {
 /// 釣果情報のピン：魚のアイコンと件数。直近 7 日は濃く、2 週間を過ぎると薄く
 struct FeedPinMarker: View {
     let pin: FeedCatchExtractor.Pin
+    /// カプセル 23 + 三角 5 + 間隔 2
+    static let height: CGFloat = 30
     private var age: TimeInterval { Date().timeIntervalSince(pin.latestAt ?? .distantPast) }
     private var opacity: Double { age < 7 * 86_400 ? 1 : (age < 14 * 86_400 ? 0.75 : 0.45) }
     var body: some View {
         VStack(spacing: 2) {
             HStack(spacing: 3) {
                 Image(systemName: "fish.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(DS.Color.background)
-                Text(pin.speciesCounts.first.map { "\($0.0)" } ?? "記事").font(.system(size: 10, weight: .semibold)).foregroundStyle(DS.Color.background).lineLimit(1)
+                Text(pin.speciesCounts.first.map { "\($0.0)" } ?? "記事").font(.system(size: 10, weight: .semibold)).foregroundStyle(DS.Color.background).lineLimit(1).fixedSize()
                 if pin.entries.count > 1 { Text("\(pin.entries.count)").font(.system(size: 10, weight: .bold, design: .rounded)).foregroundStyle(DS.Color.background.opacity(0.7)) }
             }
             .padding(.horizontal, 7).padding(.vertical, 4)

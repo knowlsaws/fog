@@ -8,9 +8,14 @@ import os
 @Observable
 final class FeedService {
     static let urlsKey = "fog.feeds.urls"
+    static let filtersKey = "fog.feeds.filters"
     static let maxItemsPerFeed = 50
     private(set) var items: [FeedItem] = []
     private(set) var feedTitles: [String: String] = [:]
+    /// RSS が無いサイトで、ページから見つけた RSS の URL（自動探索の結果）
+    private(set) var resolvedFeeds: [String: String] = [:]
+    /// 読み方：rss / html（リンク一覧）
+    private(set) var kinds: [String: String] = [:]
     private(set) var lastError: String?
     private var gate = FetchGate(minimumInterval: 3600)
     private var refreshing = false
@@ -36,8 +41,24 @@ final class FeedService {
     func remove(url: String) {
         urls.removeAll { $0 == url }
         items.removeAll { $0.feedURL == url }
-        feedTitles[url] = nil
+        feedTitles[url] = nil; resolvedFeeds[url] = nil; kinds[url] = nil
+        var f = filters; f[url] = nil; filters = f
         save()
+    }
+
+    /// RSS の無いサイトの「記事リンクの条件」（URL にこの文字を含むリンクだけ記事にする）
+    var filters: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: Self.filtersKey) as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: Self.filtersKey) }
+    }
+
+    func setFilter(url: String, filter: String) {
+        var f = filters
+        let t = filter.trimmingCharacters(in: .whitespaces)
+        if t.isEmpty { f[url] = nil } else { f[url] = t }
+        filters = f
+        gate.release(url)
+        Task { await refreshIfNeeded(force: true) }
     }
 
     /// 必要なら取得。圏外や失敗でも投げない（残っている記事で動く）
@@ -49,17 +70,30 @@ final class FeedService {
         for url in urls {
             guard force || gate.tryAcquire(url, now: now), let u = URL(string: url) else { continue }
             do {
-                var req = URLRequest(url: u)
-                req.timeoutInterval = 15
-                let (data, _) = try await URLSession.shared.data(for: req)
-                guard let parsed = FeedParser.parse(data, feedURL: url, fetchedAt: now) else {
-                    lastError = "読めない形式: \(url)"
-                    continue
+                // 自動探索で RSS が見つかっているサイトは、その RSS を読む
+                let target = resolvedFeeds[url].flatMap(URL.init(string:)) ?? u
+                let data = try await Self.download(target)
+                var result: (title: String, items: [FeedItem])?
+                if let parsed = FeedParser.parse(data, feedURL: url, fetchedAt: now) {
+                    result = (parsed.title, parsed.items); kinds[url] = "rss"
+                } else if let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .shiftJIS) ?? String(data: data, encoding: .japaneseEUC) {
+                    // RSS の無いサイト：まずページが指す RSS を探し（1 回だけ余分に読む）、無ければリンク一覧を記事にする（F-45）
+                    if resolvedFeeds[url] == nil, let discovered = HTMLFeed.discoverFeedURLs(html: html, baseURL: u).first,
+                       let d = try? await Self.download(discovered), let parsed = FeedParser.parse(d, feedURL: url, fetchedAt: now) {
+                        resolvedFeeds[url] = discovered.absoluteString
+                        result = (parsed.title, parsed.items); kinds[url] = "rss"
+                    } else {
+                        let list = HTMLFeed.items(html: html, baseURL: u, feedURL: url, feedTitle: nil, pathFilter: filters[url], fetchedAt: now)
+                        if list.isEmpty { lastError = "記事リンクが見つからない: \(url)"; continue }
+                        result = (list[0].feedTitle, list); kinds[url] = "html"
+                    }
                 }
-                feedTitles[url] = parsed.title
+                guard let result else { lastError = "読めない形式: \(url)"; continue }
+                feedTitles[url] = result.title
                 var merged = items.filter { $0.feedURL != url }
                 let known = Dictionary(uniqueKeysWithValues: items.filter { $0.feedURL == url }.map { ($0.id, $0) })
-                let fresh = parsed.items.map { i -> FeedItem in var i = i; if let k = known[i.id] { i.fetchedAt = k.fetchedAt }; return i }
+                // 前から知っている記事は最初に見た時刻を保つ（リンク一覧は日付が無いことがあり、新着を上に出すため）
+                let fresh = result.items.map { i -> FeedItem in var i = i; if let k = known[i.id] { i.fetchedAt = k.fetchedAt }; return i }
                 merged += Array(fresh.prefix(Self.maxItemsPerFeed))
                 items = merged
                 lastError = nil
@@ -79,15 +113,23 @@ final class FeedService {
     /// ホームの 1 行：関連が強い記事か、無ければ最新
     func headline(keywords: [String]) -> FeedItem? { sorted(keywords: keywords).first }
 
-    private struct Persisted: Codable { var items: [FeedItem]; var titles: [String: String]; var gate: FetchGate }
+    nonisolated private static func download(_ url: URL) async throws -> Data {
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 15
+        req.setValue("Fog/1.0 (iOS; personal fishing log)", forHTTPHeaderField: "User-Agent")
+        let (data, _) = try await URLSession.shared.data(for: req)
+        return data
+    }
+
+    private struct Persisted: Codable { var items: [FeedItem]; var titles: [String: String]; var gate: FetchGate; var resolved: [String: String]?; var kinds: [String: String]? }
 
     private func load() {
         guard let data = try? Data(contentsOf: storeURL), let p = try? FogJSON.decode(Persisted.self, from: data) else { return }
-        items = p.items; feedTitles = p.titles; gate = p.gate
+        items = p.items; feedTitles = p.titles; gate = p.gate; resolvedFeeds = p.resolved ?? [:]; kinds = p.kinds ?? [:]
     }
 
     private func save() {
-        guard let data = try? FogJSON.encode(Persisted(items: items, titles: feedTitles, gate: gate)) else { return }
+        guard let data = try? FogJSON.encode(Persisted(items: items, titles: feedTitles, gate: gate, resolved: resolvedFeeds, kinds: kinds)) else { return }
         try? data.write(to: storeURL, options: .atomic)
     }
 }
