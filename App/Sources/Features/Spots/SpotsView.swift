@@ -256,7 +256,7 @@ struct SpotsView: View {
                         .frame(height: 40).padding(.horizontal, DS.Spacing.l).padding(.bottom, DS.Spacing.s)
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: DS.Spacing.m) {
+                    LazyHStack(spacing: DS.Spacing.m) {
                         ForEach(model.allCards) { card in
                             SpotCardView(card: card, selected: selectedID == card.spot.id,
                                          onSelectHome: { model.selectForHome(card.spot) },
@@ -312,8 +312,15 @@ struct SpotCardView: View {
                     .buttonStyle(.plain)
                 }
             }
-            Text("釣れ率").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
-            Text("\(card.score)").font(DS.Font.score(40)).foregroundStyle(DS.Color.textPrimary)
+            HStack(alignment: .top, spacing: DS.Spacing.s) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("釣れ率").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                    Text("\(card.score)").font(DS.Font.score(40)).foregroundStyle(DS.Color.textPrimary)
+                }
+                Spacer(minLength: 0)
+                // 釣り場の形（上から見た航空写真、北が上。F-46）
+                if card.spot.coordinate.isPlausible { SpotSnapshotView(coordinate: card.spot.coordinate) }
+            }
             Spacer(minLength: 0)
             HStack(alignment: .center, spacing: DS.Spacing.m) {
                 VStack(alignment: .leading, spacing: 2) {
