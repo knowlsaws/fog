@@ -17,6 +17,10 @@ final class FeedService {
     /// 読み方：rss / html（リンク一覧）
     private(set) var kinds: [String: String] = [:]
     private(set) var lastError: String?
+    /// 記事が入れ替わるたびに進む（画面側の再計算の合図）
+    private(set) var revision = 0
+    /// 保存形式の版。記事の項目が増えたときに上げると、次の再計算で 1 時間の制限を無視して取り直す
+    static let schemaVersion = 2
     private var gate = FetchGate(minimumInterval: 3600)
     private var refreshing = false
     private static let log = Logger(subsystem: "fog", category: "feeds")
@@ -98,6 +102,7 @@ final class FeedService {
                 items = merged
                 lastError = nil
                 changed = true
+                revision += 1
             } catch {
                 gate.release(url)
                 lastError = error.localizedDescription
@@ -121,15 +126,18 @@ final class FeedService {
         return data
     }
 
-    private struct Persisted: Codable { var items: [FeedItem]; var titles: [String: String]; var gate: FetchGate; var resolved: [String: String]?; var kinds: [String: String]? }
+    private struct Persisted: Codable { var items: [FeedItem]; var titles: [String: String]; var gate: FetchGate; var resolved: [String: String]?; var kinds: [String: String]?; var schema: Int? }
 
     private func load() {
         guard let data = try? Data(contentsOf: storeURL), let p = try? FogJSON.decode(Persisted.self, from: data) else { return }
-        items = p.items; feedTitles = p.titles; gate = p.gate; resolvedFeeds = p.resolved ?? [:]; kinds = p.kinds ?? [:]
+        items = p.items; feedTitles = p.titles; resolvedFeeds = p.resolved ?? [:]; kinds = p.kinds ?? [:]
+        // 古い形式で保存した記事は座標などが無いので、制限を外して次の再計算で取り直す
+        gate = (p.schema ?? 1) >= Self.schemaVersion ? p.gate : FetchGate(minimumInterval: 3600)
+        revision += 1
     }
 
     private func save() {
-        guard let data = try? FogJSON.encode(Persisted(items: items, titles: feedTitles, gate: gate, resolved: resolvedFeeds, kinds: kinds)) else { return }
+        guard let data = try? FogJSON.encode(Persisted(items: items, titles: feedTitles, gate: gate, resolved: resolvedFeeds, kinds: kinds, schema: Self.schemaVersion)) else { return }
         try? data.write(to: storeURL, options: .atomic)
     }
 }
