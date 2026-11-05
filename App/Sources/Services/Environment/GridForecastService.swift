@@ -2,55 +2,110 @@ import Foundation
 import Core
 import os
 
-/// 地図レイヤー用の格子予報（F-43）。釣り場画面で層を出したときだけ、表示中心の周り約 90 km 四方を
-/// 気象（9×9、約 11 km）と海況（15×15、約 6 km）の 2 回の呼び出しで 3 日分取る。中心が 25 km 以上動くか 1 時間経ったら取り直す。
+/// 地図レイヤー用の格子予報（F-43）。0.5° のタイル単位で取り、つなげて 1 枚の格子にする。
+/// 表示範囲＋周り 1 周を先に取っておくので、パンしても端が出ない。タイルは 1 時間で取り直し、App Group に保存。
+/// 気象は Forecast API（0.1° × 0.125°、6×5 点）、海況は Marine API（0.05° × 0.0625°、11×9 点）。地点は 50 ずつに分けて呼ぶ
 @MainActor
 @Observable
 final class GridForecastService {
-    static let spanKm = 90.0
-    static let weatherN = 9
-    static let marineN = 15
-    static let refetchDistanceM = 25_000.0
+    struct Tile: Codable {
+        var weather: GridForecast?
+        var marine: GridForecast?
+        var fetchedAt: Date
+    }
 
-    private(set) var weather: GridForecast?
-    private(set) var marine: GridForecast?
-    private(set) var center: Coordinate?
+    static let maxTilesPerRequest = 12
+    static let maxCachedTiles = 40
+    static let ttl: TimeInterval = 3600
+    static let forecastDays = 3
+
+    private(set) var tiles: [TileKey: Tile] = [:]
+    /// タイルが増えた・更新されたら進む（ラスタの作り直しの合図）
+    private(set) var version = 0
     private(set) var loading = false
     private(set) var lastError: String?
-    private var task: Task<Void, Never>?
+    private var inFlight: Set<TileKey> = []
+    private var mosaicCache: (version: Int, marine: Bool, grid: GridForecast?)?
     private static let log = Logger(subsystem: "fog", category: "grid")
-    private var url: URL { FogShared.containerURL.appendingPathComponent("grid.json") }
+    private var url: URL { FogShared.containerURL.appendingPathComponent("grid-tiles.json") }
 
     init() { load() }
 
-    /// 表示中心に合わせて必要なら取り直す。取得中は重ねて呼ばない
-    func ensure(center c: Coordinate, now: Date = .now) {
-        guard c.isPlausible else { return }
-        let fresh = (weather?.fetchedAt ?? .distantPast) > now.addingTimeInterval(-3600)
-        if let center, fresh, Geo.distanceMeters(center, c) < Self.refetchDistanceM { return }
-        guard task == nil else { return }
+    /// 箱を覆うタイル＋周り 1 周を用意する。足りない・古いものだけ取る。近い順、同時 3 本まで
+    func ensure(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double, ring: Int = 1, now: Date = .now) {
+        let center = Coordinate(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        var keys = TileKey.covering(minLat: minLat, maxLat: maxLat, minLon: minLon, maxLon: maxLon, ring: ring)
+        if keys.count > Self.maxTilesPerRequest {
+            // 広すぎるときは周りを諦めて表示範囲だけ
+            keys = TileKey.covering(minLat: minLat, maxLat: maxLat, minLon: minLon, maxLon: maxLon, ring: 0)
+            if keys.count > Self.maxTilesPerRequest { keys = Array(TileKey.sortedByDistance(keys, from: center).prefix(Self.maxTilesPerRequest)) }
+        }
+        let needed = TileKey.sortedByDistance(keys, from: center).filter { k in
+            !inFlight.contains(k) && ((tiles[k]?.fetchedAt ?? .distantPast) < now.addingTimeInterval(-Self.ttl))
+        }
+        guard !needed.isEmpty else { return }
+        for k in needed { inFlight.insert(k) }
         loading = true
-        task = Task { [weak self] in
-            await self?.fetch(center: c, now: now)
-            self?.loading = false
-            self?.task = nil
+        Task { [weak self] in
+            await withTaskGroup(of: (TileKey, GridForecast?, GridForecast?, String?).self) { group in
+                var next = 0
+                while next < min(3, needed.count) {
+                    let k = needed[next]; next += 1
+                    group.addTask { await Self.fetchTile(k, now: now) }
+                }
+                for await (k, w, m, err) in group {
+                    guard let self else { return }
+                    self.inFlight.remove(k)
+                    if w != nil || m != nil {
+                        self.tiles[k] = Tile(weather: w, marine: m, fetchedAt: now)
+                        self.version += 1
+                        self.lastError = nil
+                    } else if let err {
+                        self.lastError = err
+                    }
+                    if next < needed.count {
+                        let k2 = needed[next]; next += 1
+                        group.addTask { await Self.fetchTile(k2, now: now) }
+                    }
+                }
+            }
+            guard let self else { return }
+            self.loading = !self.inFlight.isEmpty
+            self.prune()
+            self.save()
         }
     }
 
-    private func fetch(center c: Coordinate, now: Date) async {
-        let w = OpenMeteoGrid.grid(center: c, spanKm: Self.spanKm, n: Self.weatherN)
-        let m = OpenMeteoGrid.grid(center: c, spanKm: Self.spanKm, n: Self.marineN)
-        // 地点数の上限と URL 長を避けて 50 地点ずつ。応答の座標は API が格子に寄せるので、最も近い升に置く
-        async let weatherResult = Self.download(OpenMeteoGrid.chunkedURLs(marine: false, latitudes: w.latitudes, longitudes: w.longitudes), lats: w.latitudes, lons: w.longitudes, now: now)
-        async let marineResult = Self.download(OpenMeteoGrid.chunkedURLs(marine: true, latitudes: m.latitudes, longitudes: m.longitudes), lats: m.latitudes, lons: m.longitudes, now: now)
-        let (wr, mr) = await (weatherResult, marineResult)
+    /// 読み込んだタイルをつなげた格子（表示用）。版が変わるまで使い回す
+    func mosaic(marine: Bool) -> GridForecast? {
+        if let c = mosaicCache, c.version == version, c.marine == marine { return c.grid }
+        let parts = tiles.values.compactMap { marine ? $0.marine : $0.weather }
+        let grid = GridForecast.mosaic(parts, latStep: marine ? GridLattice.marineLatStep : GridLattice.weatherLatStep,
+                                       lonStep: marine ? GridLattice.marineLonStep : GridLattice.weatherLonStep)
+        mosaicCache = (version, marine, grid)
+        return grid
+    }
+
+    /// 読み込み済みタイルの範囲
+    var loadedBounds: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double)? {
+        guard !tiles.isEmpty else { return nil }
+        let keys = Array(tiles.keys)
+        return (keys.map(\.minLat).min()!, keys.map(\.maxLat).max()!, keys.map(\.minLon).min()!, keys.map(\.maxLon).max()!)
+    }
+
+    func hasTile(for c: Coordinate) -> Bool { tiles[TileKey.containing(c)] != nil }
+
+    nonisolated private static func fetchTile(_ key: TileKey, now: Date) async -> (TileKey, GridForecast?, GridForecast?, String?) {
+        let w = GridLattice.points(for: key, marine: false)
+        let m = GridLattice.points(for: key, marine: true)
+        async let wr = download(OpenMeteoGrid.chunkedURLs(marine: false, latitudes: w.latitudes, longitudes: w.longitudes, forecastDays: forecastDays), lats: w.latitudes, lons: w.longitudes, now: now)
+        async let mr = download(OpenMeteoGrid.chunkedURLs(marine: true, latitudes: m.latitudes, longitudes: m.longitudes, forecastDays: forecastDays), lats: m.latitudes, lons: m.longitudes, now: now)
+        let (weather, marine) = await (wr, mr)
         var errors: [String] = []
-        switch wr { case .success(let g): weather = g; case .failure(let e): errors.append("気象: \(e.localizedDescription)") }
-        switch mr { case .success(let g): marine = g; case .failure(let e): errors.append("海況: \(e.localizedDescription)") }
-        if case .success = wr { center = c } else if case .success = mr { center = c }
-        lastError = errors.isEmpty ? nil : errors.joined(separator: " / ")
-        if !errors.isEmpty { Self.log.notice("grid fetch: \(errors.joined(separator: " / "), privacy: .public)") }
-        save()
+        if case .failure(let e) = weather { errors.append("気象: \(e.localizedDescription)") }
+        if case .failure(let e) = marine, (try? weather.get()) == nil { errors.append("海況: \(e.localizedDescription)") }
+        if !errors.isEmpty { log.notice("tile \(key.latIndex),\(key.lonIndex): \(errors.joined(separator: " / "), privacy: .public)") }
+        return (key, try? weather.get(), try? marine.get(), errors.isEmpty ? nil : errors.joined(separator: " / "))
     }
 
     nonisolated private static func download(_ urls: [URL], lats: [Double], lons: [Double], now: Date) async -> Result<GridForecast, Error> {
@@ -78,15 +133,31 @@ final class GridForecastService {
         }
     }
 
-    private struct Persisted: Codable { var weather: GridForecast?; var marine: GridForecast?; var center: Coordinate? }
+    /// 古い順に捨てて上限に収める
+    private func prune() {
+        guard tiles.count > Self.maxCachedTiles else { return }
+        let sorted = tiles.sorted { $0.value.fetchedAt < $1.value.fetchedAt }
+        for (k, _) in sorted.prefix(tiles.count - Self.maxCachedTiles) { tiles[k] = nil }
+        version += 1
+    }
+
+    private struct Persisted: Codable { var tiles: [String: Tile] }
 
     private func load() {
         guard let data = try? Data(contentsOf: url), let p = try? FogJSON.decode(Persisted.self, from: data) else { return }
-        weather = p.weather; marine = p.marine; center = p.center
+        var out: [TileKey: Tile] = [:]
+        for (k, t) in p.tiles {
+            let parts = k.split(separator: ",").compactMap { Int($0) }
+            guard parts.count == 2 else { continue }
+            out[TileKey(latIndex: parts[0], lonIndex: parts[1])] = t
+        }
+        tiles = out
+        version += 1
     }
 
     private func save() {
-        guard let data = try? FogJSON.encode(Persisted(weather: weather, marine: marine, center: center), pretty: false) else { return }
+        let dict = Dictionary(uniqueKeysWithValues: tiles.map { ("\($0.key.latIndex),\($0.key.lonIndex)", $0.value) })
+        guard let data = try? FogJSON.encode(Persisted(tiles: dict), pretty: false) else { return }
         try? data.write(to: url, options: .atomic)
     }
 }

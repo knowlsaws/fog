@@ -239,6 +239,13 @@ enum MapLayerSettings {
     private static let particlesKey = "fog.mapLayers.particles"
     private static let densityKey = "fog.mapLayers.density"
     private static let opacityKey = "fog.mapLayers.opacity"
+    private static let usedOnceKey = "fog.mapLayers.usedOnce"
+
+    /// 一度でも層を使ったら、ホームの再計算のついでに釣り場の周りを先に取っておく
+    static var usedOnce: Bool {
+        get { UserDefaults.standard.bool(forKey: usedOnceKey) }
+        set { UserDefaults.standard.set(newValue, forKey: usedOnceKey) }
+    }
 
     enum Density: String, CaseIterable, Identifiable {
         case low, medium, high

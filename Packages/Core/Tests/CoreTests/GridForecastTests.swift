@@ -120,4 +120,39 @@ final class GridForecastTests: XCTestCase {
         XCTAssertEqual(w.count, 1)
         XCTAssertTrue(w[0].absoluteString.contains("wind_speed_unit=ms"))
     }
+
+    func testTileKeys() {
+        let k = TileKey.containing(Coordinate(latitude: 41.78, longitude: 140.72))
+        XCTAssertEqual(k, TileKey(latIndex: 83, lonIndex: 281))
+        XCTAssertEqual(k.minLat, 41.5); XCTAssertEqual(k.maxLat, 42.0); XCTAssertEqual(k.minLon, 140.5); XCTAssertEqual(k.maxLon, 141.0)
+        let cover = TileKey.covering(minLat: 41.6, maxLat: 41.9, minLon: 140.6, maxLon: 140.9)
+        XCTAssertEqual(cover, [k])
+        let ring = TileKey.covering(minLat: 41.6, maxLat: 41.9, minLon: 140.6, maxLon: 140.9, ring: 1)
+        XCTAssertEqual(ring.count, 9)
+        XCTAssertEqual(ring.first, TileKey(latIndex: 82, lonIndex: 280))
+        let w = GridLattice.points(for: k, marine: false)
+        XCTAssertEqual(w.latitudes, [41.5, 41.6, 41.7, 41.8, 41.9, 42.0])
+        XCTAssertEqual(w.longitudes, [140.5, 140.625, 140.75, 140.875, 141.0])
+        let m = GridLattice.points(for: k, marine: true)
+        XCTAssertEqual(m.latitudes.count, 11); XCTAssertEqual(m.longitudes.count, 9)
+        XCTAssertEqual(TileKey.sortedByDistance(ring, from: k.center).first, k)
+    }
+
+    func testMosaicJoinsTilesAndAlignsTimes() {
+        // 2 タイル（東西に隣接、端を共有）。西は t0 から、東は t0+1h からの時刻
+        var west: [GridForecast.Variable: [Double?]] = [:]
+        west[.windSpeed] = [1, 2, 1, 2, 3, 4, 3, 4] // 2 時刻 × 2 行 × 2 列
+        let w = GridForecast(latitudes: [41.0, 41.1], longitudes: [140.0, 140.125], times: [t0, t0.addingTimeInterval(3600)], values: west, fetchedAt: t0)
+        var east: [GridForecast.Variable: [Double?]] = [:]
+        east[.windSpeed] = [9, 8, 9, 8] // 1 時刻（t0+1h）× 2 行 × 2 列、西端は共有点
+        let e = GridForecast(latitudes: [41.0, 41.1], longitudes: [140.125, 140.25], times: [t0.addingTimeInterval(3600)], values: east, fetchedAt: t0.addingTimeInterval(60))
+        let m = GridForecast.mosaic([w, e], latStep: 0.1, lonStep: 0.125)!
+        XCTAssertEqual(m.latitudes, [41.0, 41.1]); XCTAssertEqual(m.longitudes, [140.0, 140.125, 140.25])
+        // 時刻は最新タイル（東）のもの → 1 時刻だけ
+        XCTAssertEqual(m.times, [t0.addingTimeInterval(3600)])
+        XCTAssertEqual(m.value(.windSpeed, timeIndex: 0, row: 0, col: 0), 3)   // 西の t0+1h
+        XCTAssertEqual(m.value(.windSpeed, timeIndex: 0, row: 0, col: 2), 8)   // 東
+        XCTAssertEqual(m.value(.windSpeed, timeIndex: 0, row: 1, col: 1), 9)   // 共有点は後勝ち（東）
+        XCTAssertNil(GridForecast.mosaic([], latStep: 0.1, lonStep: 0.125))
+    }
 }
