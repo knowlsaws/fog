@@ -40,8 +40,9 @@ final class GridForecastService {
     private func fetch(center c: Coordinate, now: Date) async {
         let w = OpenMeteoGrid.grid(center: c, spanKm: Self.spanKm, n: Self.weatherN)
         let m = OpenMeteoGrid.grid(center: c, spanKm: Self.spanKm, n: Self.marineN)
-        async let weatherResult = Self.download(OpenMeteoGrid.weatherURL(latitudes: w.latitudes, longitudes: w.longitudes), lats: w.latitudes, lons: w.longitudes, now: now)
-        async let marineResult = Self.download(OpenMeteoGrid.marineURL(latitudes: m.latitudes, longitudes: m.longitudes), lats: m.latitudes, lons: m.longitudes, now: now)
+        // 地点数の上限と URL 長を避けて 50 地点ずつ。応答の座標は API が格子に寄せるので、最も近い升に置く
+        async let weatherResult = Self.download(OpenMeteoGrid.chunkedURLs(marine: false, latitudes: w.latitudes, longitudes: w.longitudes), lats: w.latitudes, lons: w.longitudes, now: now)
+        async let marineResult = Self.download(OpenMeteoGrid.chunkedURLs(marine: true, latitudes: m.latitudes, longitudes: m.longitudes), lats: m.latitudes, lons: m.longitudes, now: now)
         let (wr, mr) = await (weatherResult, marineResult)
         var errors: [String] = []
         switch wr { case .success(let g): weather = g; case .failure(let e): errors.append("気象: \(e.localizedDescription)") }
@@ -52,15 +53,26 @@ final class GridForecastService {
         save()
     }
 
-    nonisolated private static func download(_ url: URL, lats: [Double], lons: [Double], now: Date) async -> Result<GridForecast, Error> {
+    nonisolated private static func download(_ urls: [URL], lats: [Double], lons: [Double], now: Date) async -> Result<GridForecast, Error> {
         do {
-            var req = URLRequest(url: url)
-            req.timeoutInterval = 30
-            let (data, response) = try await URLSession.shared.data(for: req)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode), http.statusCode != 400 {
-                throw URLError(.badServerResponse)
+            var points: [OpenMeteoGrid.DecodedPoint] = []
+            var lastError: Error?
+            for url in urls {
+                do {
+                    var req = URLRequest(url: url)
+                    req.timeoutInterval = 30
+                    let (data, response) = try await URLSession.shared.data(for: req)
+                    if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode), http.statusCode != 400 {
+                        throw NSError(domain: "fog.grid", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"])
+                    }
+                    points += try OpenMeteoGrid.decodePoints(data)
+                } catch {
+                    // 海況は全部陸の塊だとエラー応答になることがある。他の塊が取れていれば続ける
+                    lastError = error
+                }
             }
-            return .success(try OpenMeteoGrid.decode(data, latitudes: lats, longitudes: lons, fetchedAt: now))
+            if points.isEmpty, let lastError { throw lastError }
+            return .success(try OpenMeteoGrid.assemble(points: points, latitudes: lats, longitudes: lons, fetchedAt: now))
         } catch {
             return .failure(error)
         }

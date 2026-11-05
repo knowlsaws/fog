@@ -48,7 +48,7 @@ struct FieldRaster {
     }
 
     /// 色面と流れの格子を作る。`width`×`height` の画素、流れは `uvN` 刻み
-    static func build(grid: GridForecast, layer: MapLayer, time: Date, box: GeoBox, opacity: Double = 0.72, width: Int = 180, height: Int = 240, uvN: Int = 36) -> FieldRaster {
+    static func build(grid: GridForecast, layer: MapLayer, time: Date, box: GeoBox, opacity: Double = MapLayerSettings.defaultOpacity, width: Int = 180, height: Int = 240, uvN: Int = 36) -> FieldRaster {
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         let alpha = UInt8(max(0, min(255, opacity * 255)))
         for py in 0..<height {

@@ -166,7 +166,7 @@ struct MapLayerSettingsView: View {
                 .onChange(of: density) { _, v in MapLayerSettings.density = v }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("色の濃さ").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
-                    Slider(value: $opacity, in: 0.3...1.0).tint(DS.Color.accent)
+                    Slider(value: $opacity, in: 0.15...0.8).tint(DS.Color.accent)
                         .onChange(of: opacity) { _, v in MapLayerSettings.opacity = v }
                 }
                 .listRowBackground(DS.Color.background).listRowSeparatorTint(DS.Color.surfaceRaised)

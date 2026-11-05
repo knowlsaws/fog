@@ -63,7 +63,7 @@ final class ParticleSystem {
             path.addLine(to: last)
             let s = min(1, p.speed / maxSpeed)
             let fade = p.age < 10 ? Double(p.age) / 10 : (p.age > p.life - 15 ? Double(p.life - p.age) / 15 : 1)
-            ctx.stroke(path, with: .color(Color.white.opacity((0.35 + 0.55 * s) * fade)), style: StrokeStyle(lineWidth: 1 + 1.2 * s, lineCap: .round, lineJoin: .round))
+            ctx.stroke(path, with: .color(Color.white.opacity((0.25 + 0.5 * s) * fade)), style: StrokeStyle(lineWidth: 0.8 + 1.0 * s, lineCap: .round, lineJoin: .round))
         }
     }
 }
