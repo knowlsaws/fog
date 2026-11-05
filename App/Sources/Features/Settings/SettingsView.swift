@@ -113,6 +113,7 @@ struct TackleSettingsView: View {
     @State private var rigs: [Rig] = []
     @State private var editingTackle: Tackle?
     @State private var editingRig: Rig?
+    @State private var editingItem: InventoryItem?
     static let maxRigs = 10
 
     var body: some View {
@@ -162,12 +163,38 @@ struct TackleSettingsView: View {
                         .settingsRow()
                     }
                 } header: { SectionLabel(text: "リグプリセット \(rigs.count)/\(Self.maxRigs)") }
+
+                // 在庫（F-26）：針ロストでそのリグのシンカーとフックが 1 つ減る
+                Section {
+                    ForEach(services.inventory.items) { item in
+                        HStack(spacing: DS.Spacing.s) {
+                            Button { editingItem = item } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.name).font(DS.Font.label).foregroundStyle(item.isLow ? DS.Color.holiday : DS.Color.textPrimary)
+                                    Text(item.kind.label + (item.rigID.flatMap { id in rigs.first { $0.id == id }?.displayName }.map { " · \($0)" } ?? "")).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                            Button { services.inventory.adjust(id: item.id, by: -1) } label: { Image(systemName: "minus.circle").font(.system(size: 18)).foregroundStyle(DS.Color.textSecondary) }.buttonStyle(.plain)
+                            Text("\(item.count)").font(DS.Font.number(16)).foregroundStyle(item.isLow ? DS.Color.holiday : DS.Color.textPrimary).frame(width: 32)
+                            Button { services.inventory.adjust(id: item.id, by: +1) } label: { Image(systemName: "plus.circle").font(.system(size: 18)).foregroundStyle(DS.Color.textSecondary) }.buttonStyle(.plain)
+                        }
+                        .settingsRow()
+                    }
+                    .onDelete { idx in idx.map { services.inventory.items[$0] }.forEach { services.inventory.delete(id: $0.id) } }
+                    Button { editingItem = InventoryItem(name: "", kind: .sinker, count: 10, lowThreshold: 3, rigID: rigs.first?.id) } label: {
+                        Label("在庫を追加", systemImage: "plus").font(DS.Font.label).foregroundStyle(DS.Color.accent)
+                    }
+                    .settingsRow()
+                } header: { SectionLabel(text: "在庫（針ロストで減る）") }
             }
             .listStyle(.plain)
         }
         .onAppear(perform: reload)
         .sheet(item: $editingTackle) { t in TackleEditSheet(tackle: t) { reload() }.presentationDetents([.medium]) }
         .sheet(item: $editingRig) { r in RigEditSheet(rig: r) { reload() }.presentationDetents([.medium]) }
+        .sheet(item: $editingItem) { i in InventoryEditSheet(item: i, rigs: rigs).presentationDetents([.medium]) }
     }
 
     private func reload() {
@@ -247,6 +274,54 @@ private struct RigEditSheet: View {
                         r.sinkerGrams = Double(grams.replacingOccurrences(of: ",", with: ".")) ?? r.sinkerGrams
                         try? services.store.upsert(r)
                         onSave(); dismiss()
+                    }
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+private struct InventoryEditSheet: View {
+    @Environment(AppServices.self) private var services
+    @Environment(\.dismiss) private var dismiss
+    @State var item: InventoryItem
+    let rigs: [Rig]
+    @State private var countText = ""
+    @State private var thresholdText = ""
+    private static let noRig = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("名前（例: 14g バレット）", text: $item.name).settingsRow()
+                Picker("種類", selection: $item.kind) {
+                    ForEach(InventoryItem.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented).settingsRow()
+                HStack { TextField("数", text: $countText).keyboardType(.numberPad); Text("個").foregroundStyle(DS.Color.textTertiary) }.settingsRow()
+                HStack { TextField("知らせる残数", text: $thresholdText).keyboardType(.numberPad); Text("個以下").foregroundStyle(DS.Color.textTertiary) }.settingsRow()
+                Picker("紐付くリグ", selection: Binding(get: { item.rigID ?? Self.noRig }, set: { item.rigID = $0 == Self.noRig ? nil : $0 })) {
+                    Text("なし").tag(Self.noRig)
+                    ForEach(rigs) { r in Text(r.displayName).tag(r.id) }
+                }
+                .settingsRow()
+            }
+            .scrollContentBackground(.hidden)
+            .background(DS.Color.background)
+            .navigationTitle("在庫")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { countText = String(item.count); thresholdText = String(item.lowThreshold) }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        var i = item
+                        if i.name.isEmpty { i.name = i.kind.label }
+                        i.count = max(0, Int(countText) ?? i.count)
+                        i.lowThreshold = max(0, Int(thresholdText) ?? i.lowThreshold)
+                        services.inventory.upsert(i)
+                        dismiss()
                     }
                 }
             }
@@ -430,9 +505,35 @@ struct NotificationSettingsView: View {
 // MARK: - 判定
 
 struct JudgementSettingsView: View {
+    @Environment(AppServices.self) private var services
+    @State private var accuracy: SessionReview.Accuracy?
+
     var body: some View {
         SettingsPage(title: "判定") {
             List {
+                // 釣れ率の精度（F-42）：高いときと低いときの 1 時間あたりの釣果
+                Section {
+                    if let a = accuracy, a.sessions > 0 {
+                        HStack {
+                            Text("釣れ率 70 以上のとき").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                            Spacer()
+                            Text(a.catchesPerHourHigh.map { String(format: "%.2f 尾/時", $0) } ?? "—").font(DS.Font.number(16)).foregroundStyle(DS.Color.accent)
+                        }
+                        .settingsRow()
+                        HStack {
+                            Text("70 未満のとき").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                            Spacer()
+                            Text(a.catchesPerHourLow.map { String(format: "%.2f 尾/時", $0) } ?? "—").font(DS.Font.number(16)).foregroundStyle(DS.Color.textSecondary)
+                        }
+                        .settingsRow()
+                        Text(a.ratio.map { String(format: "%d 釣行・%d 尾。高いときは低いときの %.1f 倍", a.sessions, a.catchesHigh + a.catchesLow, $0) }
+                             ?? "\(a.sessions) 釣行・\(a.catchesHigh + a.catchesLow) 尾。比較にはどちらの時間帯の釣果も要ります")
+                            .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                    } else {
+                        Text(accuracy == nil ? "計算中" : "終わった釣行がまだありません").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                    }
+                } header: { SectionLabel(text: "釣れ率の精度（全釣行の答え合わせ）") }
+
                 HStack {
                     Text("魚種判定モデル").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
                     Spacer()
@@ -450,6 +551,7 @@ struct JudgementSettingsView: View {
             }
             .listStyle(.plain)
         }
+        .task { accuracy = SessionReviewer.accuracy(services: services) }
     }
 }
 
@@ -490,7 +592,9 @@ struct DetectionSettingsView: View {
 // MARK: - 情報源
 
 struct SourcesSettingsView: View {
+    @Environment(AppServices.self) private var services
     @State private var weatherAttribution: (serviceName: String, legalURL: URL)?
+    @State private var newFeedURL = ""
 
     var body: some View {
         SettingsPage(title: "情報源") {
@@ -525,8 +629,25 @@ struct SourcesSettingsView: View {
                     .settingsRow()
                 } header: { SectionLabel(text: "海況・潮汐・港") }
                 Section {
-                    Text("RSS の登録は F-27（L17）で追加します。").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
-                } header: { SectionLabel(text: "釣果情報") }
+                    ForEach(services.feeds.urls, id: \.self) { u in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(services.feeds.feedTitles[u] ?? "取得待ち").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary).lineLimit(1)
+                            Text(u).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
+                        }
+                        .settingsRow()
+                    }
+                    .onDelete { idx in idx.map { services.feeds.urls[$0] }.forEach { services.feeds.remove(url: $0) } }
+                    HStack {
+                        TextField("RSS の URL（https://…）", text: $newFeedURL).font(DS.Font.label).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("追加") { services.feeds.add(url: newFeedURL); newFeedURL = "" }.font(DS.Font.label).foregroundStyle(DS.Color.accent)
+                            .disabled(URL(string: newFeedURL)?.scheme?.hasPrefix("http") != true)
+                    }
+                    .settingsRow()
+                    if let e = services.feeds.lastError {
+                        Text(e).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                    }
+                    Text("釣りメディア・釣具店ブログの RSS を登録すると、ホームの 1 行と「釣果情報」に集まります。取得は 1 時間に 1 回。記事の本文は読みに行きません").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                } header: { SectionLabel(text: "釣果情報（RSS）") }
             }
             .listStyle(.plain)
         }

@@ -41,4 +41,43 @@ public enum SessionReview {
         let hits = scores.filter { $0.1 >= goodThreshold }.count
         return Result(meanScore: mean, meanScoreAtCatch: atCatch, hitRate: Double(hits) / Double(scores.count), catchScores: scores)
     }
+
+    /// 精度の集計（F-42）：釣れ率が高いときと低いときで、1 時間あたりの釣果がどれだけ違うか
+    public struct Accuracy: Hashable, Sendable {
+        public var sessions: Int
+        public var highHours: Double
+        public var lowHours: Double
+        public var catchesHigh: Int
+        public var catchesLow: Int
+        public var catchesPerHourHigh: Double? { highHours > 0.1 ? Double(catchesHigh) / highHours : nil }
+        public var catchesPerHourLow: Double? { lowHours > 0.1 ? Double(catchesLow) / lowHours : nil }
+        /// 高いときは低いときの何倍釣れたか（どちらかが無ければ nil）
+        public var ratio: Double? {
+            guard let h = catchesPerHourHigh, let l = catchesPerHourLow, l > 0 else { return nil }
+            return h / l
+        }
+    }
+
+    /// 1 釣行分：`threshold` 以上だった時間と釣果、未満だった時間と釣果
+    public static func split(points: [ScorePoint], catchTimes: [Date], from: Date, to: Date, threshold: Int = 70) -> Accuracy {
+        let inRange = points.filter { $0.at >= from && $0.at <= to }.sorted { $0.at < $1.at }
+        var acc = Accuracy(sessions: 1, highHours: 0, lowHours: 0, catchesHigh: 0, catchesLow: 0)
+        guard inRange.count >= 2 else { return acc }
+        for i in 0..<(inRange.count - 1) {
+            let hours = inRange[i + 1].at.timeIntervalSince(inRange[i].at) / 3600
+            if inRange[i].score >= threshold { acc.highHours += hours } else { acc.lowHours += hours }
+        }
+        for t in catchTimes {
+            guard let p = inRange.last(where: { $0.at <= t }) ?? inRange.first else { continue }
+            if p.score >= threshold { acc.catchesHigh += 1 } else { acc.catchesLow += 1 }
+        }
+        return acc
+    }
+
+    public static func aggregate(_ parts: [Accuracy]) -> Accuracy {
+        parts.reduce(Accuracy(sessions: 0, highHours: 0, lowHours: 0, catchesHigh: 0, catchesLow: 0)) { a, b in
+            Accuracy(sessions: a.sessions + b.sessions, highHours: a.highHours + b.highHours, lowHours: a.lowHours + b.lowHours,
+                     catchesHigh: a.catchesHigh + b.catchesHigh, catchesLow: a.catchesLow + b.catchesLow)
+        }
+    }
 }

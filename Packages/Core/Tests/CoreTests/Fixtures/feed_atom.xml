@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>釣具店ブログ</title>
+<entry>
+<title>ソイの入荷情報とおすすめリグ</title>
+<link rel="alternate" href="https://example.com/b1"/>
+<id>tag:example.com,2026:b1</id>
+<updated>2026-11-05T01:00:00Z</updated>
+<summary>ソイ狙いは 14g のテキサスが好調。</summary>
+</entry>
+</feed>

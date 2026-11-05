@@ -30,6 +30,12 @@ enum WidgetSync {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
+    /// 立ち位置が根掛かりメッシュに入った／出た（F-39）
+    static func setSnagZone(_ on: Bool) {
+        FogShared.updateSnapshot { $0.isSnagZone = on }
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     static func setTackle(_ tackle: TackleKind?) {
         FogShared.updateSnapshot { $0.tackle = tackle }
         WidgetCenter.shared.reloadAllTimelines()

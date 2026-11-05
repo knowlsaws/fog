@@ -29,6 +29,8 @@ struct ScoreEntry: TimelineEntry {
     let tide: [WidgetSnapshot.Point]
     let tideRange: ClosedRange<Double>?
     let hasData: Bool
+    /// 立ち位置が根掛かりメッシュ（F-39）
+    var isSnagZone: Bool = false
     /// 中ウィジェットの具体的な情報
     var nextTide: WidgetSnapshot.Event? = nil
     var nextTwilight: WidgetSnapshot.Event? = nil
@@ -60,6 +62,12 @@ struct ScoreEntry: TimelineEntry {
                           tideLevelCm: p?.tideLevelCm, airTemperatureC: p?.airTemperatureC, windSpeedMS: p?.windSpeedMS,
                           windDirectionDeg: p?.windDirectionDeg, conditionCode: p?.conditionCode)
     }
+
+    static func make(at date: Date, from s: WidgetSnapshot, snag: Bool) -> ScoreEntry {
+        var e = make(at: date, from: s)
+        e.isSnagZone = snag
+        return e
+    }
 }
 
 struct ScoreProvider: TimelineProvider {
@@ -82,7 +90,7 @@ struct ScoreProvider: TimelineProvider {
         guard let s = FogShared.loadSnapshot() else { return [.empty(now)] }
         var points = s.timeline(from: now, stepMinutes: 15, count: 96)
         if points.isEmpty { points = [WidgetSnapshot.Point(at: now, score: s.point(at: now)?.score ?? 0)] }
-        return points.map { ScoreEntry.make(at: $0.at, from: s) }
+        return points.map { ScoreEntry.make(at: $0.at, from: s, snag: s.isSnagZone ?? false) }
     }
 }
 
@@ -249,12 +257,12 @@ private struct RoundAction<Content: View>: View {
 }
 
 private extension View {
-    /// 背景 #0B0B0C。記録中は薄いオレンジ（§8）。
-    func fogWidgetBackground(recording: Bool) -> some View {
+    /// 背景 #0B0B0C。記録中は薄いテーマ色（§8）。根掛かりメッシュの上では薄い赤（F-39）。
+    func fogWidgetBackground(recording: Bool, snag: Bool = false) -> some View {
         containerBackground(for: .widget) {
             ZStack {
                 WColor.background
-                if recording { WColor.accent.opacity(0.14) }
+                if snag { Color(red: 1.0, green: 0.36, blue: 0.36).opacity(0.22) } else if recording { WColor.accent.opacity(0.14) }
             }
         }
     }
@@ -270,7 +278,7 @@ struct SmallScoreView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .opacity(entry.hasData ? 1 : 0.5)
-        .fogWidgetBackground(recording: entry.isRecording)
+        .fogWidgetBackground(recording: entry.isRecording, snag: entry.isSnagZone)
         .widgetURL(URL(string: "fog://home"))
     }
 }
@@ -350,7 +358,7 @@ struct MediumScoreView: View {
             }
         }
         .padding(12)
-        .fogWidgetBackground(recording: entry.isRecording)
+        .fogWidgetBackground(recording: entry.isRecording, snag: entry.isSnagZone)
         .widgetURL(URL(string: "fog://home"))
     }
 }

@@ -12,6 +12,8 @@ enum SessionNotifications {
     static let peakCategory = "fog.peak"
     static let briefCategory = "fog.brief"
     static let safetyCategory = "fog.safety"
+    static let snagCategory = "fog.snag"
+    static let inventoryCategory = "fog.inventory"
 
     static func registerCategories() {
         let stop = UNNotificationAction(identifier: stopAction, title: "停止", options: [.destructive])
@@ -98,5 +100,17 @@ enum SessionNotifications {
 
     static func cancelSafety() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: SafetyPlanner.Kind.allCases.map { "safety.\($0.rawValue)" })
+    }
+
+    /// 根掛かり注意（F-39）：過去に針を失ったメッシュに入ったとき 1 回。ID 固定で連打しない
+    static func snag(losses: Int, meshKey: String) {
+        guard NotificationSettings.isEnabled(.snag) else { return }
+        post(id: "snag.\(meshKey)", category: snagCategory, title: "根掛かり注意", body: "この場所で過去に \(losses) 回針を失っています", trigger: nil, timeSensitive: true)
+    }
+
+    /// 在庫（F-26）：しきい値を下回ったとき
+    static func inventoryLow(_ item: InventoryItem) {
+        guard NotificationSettings.isEnabled(.inventory) else { return }
+        post(id: "inventory.\(item.id)", category: inventoryCategory, title: "\(item.name) が残り \(item.count)", body: "\(item.kind.label)の在庫が少なくなりました", trigger: nil, timeSensitive: false)
     }
 }

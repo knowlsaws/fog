@@ -16,6 +16,8 @@ final class AppServices {
     let capture: CaptureService
     let photoImport: PhotoImportService
     let report: ReportService
+    let feeds = FeedService()
+    let inventory = InventoryStore()
     let router = Router()
     var dataManager: DataManager { DataManager(store: store) }
 
@@ -47,7 +49,7 @@ final class AppServices {
         }
     }
 
-    var hookRecorder: HookEventRecorder { HookEventRecorder(store: store, detection: detection, scheduler: scheduler, capture: capture) }
+    var hookRecorder: HookEventRecorder { HookEventRecorder(store: store, detection: detection, scheduler: scheduler, capture: capture, inventory: inventory) }
 
     /// 起動時：ダミーデータ、通知、自動検出。
     func start() async {

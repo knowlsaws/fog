@@ -8,6 +8,8 @@ struct YearCalendarSheet: View {
     let onPick: (Date) -> Void
     @State private var heat: [Date: Int] = [:]
     @State private var task: Task<Void, Never>?
+    /// 魚種別の狙い目（F-40）。空は全体
+    @State private var species: String = ""
 
     private var calendar: Calendar { var c = Calendar(identifier: .gregorian); c.timeZone = model.timeZone; return c }
 
@@ -17,6 +19,14 @@ struct YearCalendarSheet: View {
                 Text("年間の潮回り").font(DS.Font.number(20)).foregroundStyle(DS.Color.textPrimary)
                 Spacer()
                 legend
+            }
+            if !model.speciesScores.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: DS.Spacing.s) {
+                        chip("全部", selected: species.isEmpty) { species = "" }
+                        ForEach(model.speciesScores, id: \.species) { s in chip(s.species, selected: species == s.species) { species = s.species } }
+                    }
+                }
             }
             ScrollView(showsIndicators: false) {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: DS.Spacing.m), GridItem(.flexible(), spacing: DS.Spacing.m)], spacing: DS.Spacing.m) {
@@ -29,8 +39,24 @@ struct YearCalendarSheet: View {
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DS.Color.background)
-        .onAppear { task = model.yearHeat { heat = $0 } }
+        .onAppear { start() }
+        .onChange(of: species) { _, _ in start() }
         .onDisappear { task?.cancel() }
+    }
+
+    private func start() {
+        task?.cancel()
+        heat = [:]
+        task = model.yearHeat(species: species.isEmpty ? nil : species) { heat = $0 }
+    }
+
+    private func chip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(text).font(DS.Font.caption).foregroundStyle(selected ? DS.Color.background : DS.Color.textPrimary)
+                .padding(.horizontal, DS.Spacing.m).padding(.vertical, DS.Spacing.xs)
+                .background(selected ? DS.Color.accent : DS.Color.surface, in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var legend: some View {
