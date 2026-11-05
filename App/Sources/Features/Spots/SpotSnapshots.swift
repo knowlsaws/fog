@@ -70,7 +70,7 @@ struct SpotSnapshotView: View {
                 DS.Color.surface
             }
             // 地図アプリと同じ形の方位計（北が上）。赤い針が北
-            CompassRose().frame(width: 18, height: 18).padding(4)
+            CompassRose().frame(width: 12, height: 22).padding(5)
         }
         .frame(width: SpotSnapshots.size.width, height: SpotSnapshots.size.height)
         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
@@ -102,22 +102,38 @@ struct SpotSnapshotView: View {
 /// 小さな方位計：暗い円に、北を指す赤い針と南側の白い針。回転はしない（写真は常に北が上）
 struct CompassRose: View {
     var body: some View {
-        ZStack {
-            Circle().fill(DS.Color.background.opacity(0.8))
-            Circle().stroke(Color.white.opacity(0.35), lineWidth: 0.8)
-            Needle().fill(Color(red: 0.95, green: 0.27, blue: 0.27)).padding(3)
-            Needle().fill(Color.white.opacity(0.85)).rotationEffect(.degrees(180)).padding(3)
+        // 地図の北矢印（縦線・下の横棒・上の半矢印）。白に薄い影を付けて衛星写真の上でも読めるようにする
+        NorthArrow()
+            .stroke(Color.white, style: StrokeStyle(lineWidth: 1.6, lineCap: .square, lineJoin: .miter))
+            .overlay(NorthArrowHead().fill(Color.white))
+            .shadow(color: .black.opacity(0.7), radius: 1.2)
+    }
+
+    /// 線の部分: 縦線、下の横棒、矢印の下辺の短い横線
+    struct NorthArrow: Shape {
+        func path(in r: CGRect) -> Path {
+            var p = Path()
+            let x = r.midX
+            let top = r.minY + r.height * 0.05
+            let barY = r.minY + r.height * 0.40   // 矢印下辺
+            let crossY = r.minY + r.height * 0.68 // 下の横棒
+            p.move(to: CGPoint(x: x, y: top)); p.addLine(to: CGPoint(x: x, y: r.maxY))
+            p.move(to: CGPoint(x: x - r.width * 0.33, y: barY)); p.addLine(to: CGPoint(x: x + r.width * 0.22, y: barY))
+            p.move(to: CGPoint(x: x - r.width * 0.48, y: crossY)); p.addLine(to: CGPoint(x: x + r.width * 0.48, y: crossY))
+            return p
         }
     }
 
-    /// 中心から上に伸びる細い三角（針の半分）
-    struct Needle: Shape {
+    /// 上の塗りつぶし半矢印（左側の直角三角形）
+    struct NorthArrowHead: Shape {
         func path(in r: CGRect) -> Path {
             var p = Path()
-            let c = CGPoint(x: r.midX, y: r.midY)
-            p.move(to: CGPoint(x: r.midX, y: r.minY))
-            p.addLine(to: CGPoint(x: c.x + r.width * 0.16, y: c.y))
-            p.addLine(to: CGPoint(x: c.x - r.width * 0.16, y: c.y))
+            let x = r.midX
+            let top = r.minY + r.height * 0.05
+            let barY = r.minY + r.height * 0.40
+            p.move(to: CGPoint(x: x, y: top))
+            p.addLine(to: CGPoint(x: x, y: barY))
+            p.addLine(to: CGPoint(x: x - r.width * 0.33, y: barY))
             p.closeSubpath()
             return p
         }
