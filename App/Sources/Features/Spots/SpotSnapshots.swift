@@ -75,7 +75,11 @@ struct SpotSnapshotView: View {
         .frame(width: SpotSnapshots.size.width, height: SpotSnapshots.size.height)
         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
         .task(id: "\(coordinate.latitude),\(coordinate.longitude)") {
-            snapshot = SpotSnapshots.shared.cached(for: coordinate) ?? (await SpotSnapshots.shared.image(for: coordinate))
+            if let c = SpotSnapshots.shared.cached(for: coordinate) {
+                snapshot = c
+            } else {
+                snapshot = await SpotSnapshots.shared.image(for: coordinate)
+            }
         }
     }
 
