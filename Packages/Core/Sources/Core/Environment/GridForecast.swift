@@ -4,10 +4,18 @@ import Foundation
 /// 気象（約 11 km）と海況（約 5 km）は格子が違うので別々の `GridForecast` にする。
 public struct GridForecast: Codable, Hashable, Sendable {
     public enum Variable: String, Codable, CaseIterable, Sendable {
-        case windSpeed, windDirection, windGust, airTemperature, precipitation, cloudCover, pressure
-        case waveHeight, waveDirection, wavePeriod, swellHeight, swellDirection, currentSpeed, currentDirection, seaSurfaceTemperature
+        // 気象（Forecast API）
+        case windSpeed, windDirection, windGust, airTemperature, apparentTemperature, humidity, dewPoint
+        case precipitation, precipitationProbability, snowfall, snowDepth
+        case cloudCover, cloudLow, cloudMid, cloudHigh, visibility, cape, pressure, uvIndex, freezingLevel
+        // 海況（Marine API）
+        case waveHeight, waveDirection, wavePeriod, windWaveHeight, windWaveDirection, windWavePeriod
+        case swellHeight, swellDirection, swellPeriod, secondarySwellHeight, secondarySwellDirection, secondarySwellPeriod
+        case currentSpeed, currentDirection, seaSurfaceTemperature, seaLevel
         /// 方向の変数か（補間は u/v で行う）
-        public var isDirection: Bool { [.windDirection, .waveDirection, .swellDirection, .currentDirection].contains(self) }
+        public var isDirection: Bool {
+            [.windDirection, .waveDirection, .windWaveDirection, .swellDirection, .secondarySwellDirection, .currentDirection].contains(self)
+        }
     }
 
     /// 行 = 緯度（南→北）、列 = 経度（西→東）

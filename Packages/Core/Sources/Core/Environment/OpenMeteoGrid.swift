@@ -3,9 +3,14 @@ import Foundation
 /// Open-Meteo の複数地点呼び出しで、釣り場の周りの格子をまとめて取る（F-43）。通信は App 側。
 /// 気象は Forecast API（約 11 km）、海況は Marine API（約 5 km）。どちらも CC BY 4.0、クレジットは設定の情報源に表示済み。
 public enum OpenMeteoGrid {
-    public static let weatherFields = ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "temperature_2m", "precipitation", "cloud_cover", "pressure_msl"]
-    public static let marineFields = ["wave_height", "wave_direction", "wave_period", "swell_wave_height", "swell_wave_direction",
-                                      "ocean_current_velocity", "ocean_current_direction", "sea_surface_temperature"]
+    public static let weatherFields = ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "temperature_2m", "apparent_temperature",
+                                       "relative_humidity_2m", "dew_point_2m", "precipitation", "precipitation_probability", "snowfall", "snow_depth",
+                                       "cloud_cover", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "visibility", "cape", "pressure_msl",
+                                       "uv_index", "freezing_level_height"]
+    public static let marineFields = ["wave_height", "wave_direction", "wave_period", "wind_wave_height", "wind_wave_direction", "wind_wave_period",
+                                      "swell_wave_height", "swell_wave_direction", "swell_wave_period",
+                                      "secondary_swell_wave_height", "secondary_swell_wave_direction", "secondary_swell_wave_period",
+                                      "ocean_current_velocity", "ocean_current_direction", "sea_surface_temperature", "sea_level_height_msl"]
 
     /// 中心から `spanKm` 四方を `n` × `n` の点に。緯度・経度は 0.01° に丸める
     public static func grid(center: Coordinate, spanKm: Double, n: Int) -> (latitudes: [Double], longitudes: [Double]) {
@@ -71,12 +76,18 @@ public enum OpenMeteoGrid {
 
     static let weatherMap: [String: GridForecast.Variable] = [
         "wind_speed_10m": .windSpeed, "wind_direction_10m": .windDirection, "wind_gusts_10m": .windGust, "temperature_2m": .airTemperature,
-        "precipitation": .precipitation, "cloud_cover": .cloudCover, "pressure_msl": .pressure,
+        "apparent_temperature": .apparentTemperature, "relative_humidity_2m": .humidity, "dew_point_2m": .dewPoint,
+        "precipitation": .precipitation, "precipitation_probability": .precipitationProbability, "snowfall": .snowfall, "snow_depth": .snowDepth,
+        "cloud_cover": .cloudCover, "cloud_cover_low": .cloudLow, "cloud_cover_mid": .cloudMid, "cloud_cover_high": .cloudHigh,
+        "visibility": .visibility, "cape": .cape, "pressure_msl": .pressure, "uv_index": .uvIndex, "freezing_level_height": .freezingLevel,
     ]
     static let marineMap: [String: GridForecast.Variable] = [
-        "wave_height": .waveHeight, "wave_direction": .waveDirection, "wave_period": .wavePeriod, "swell_wave_height": .swellHeight,
-        "swell_wave_direction": .swellDirection, "ocean_current_velocity": .currentSpeed, "ocean_current_direction": .currentDirection,
-        "sea_surface_temperature": .seaSurfaceTemperature,
+        "wave_height": .waveHeight, "wave_direction": .waveDirection, "wave_period": .wavePeriod,
+        "wind_wave_height": .windWaveHeight, "wind_wave_direction": .windWaveDirection, "wind_wave_period": .windWavePeriod,
+        "swell_wave_height": .swellHeight, "swell_wave_direction": .swellDirection, "swell_wave_period": .swellPeriod,
+        "secondary_swell_wave_height": .secondarySwellHeight, "secondary_swell_wave_direction": .secondarySwellDirection, "secondary_swell_wave_period": .secondarySwellPeriod,
+        "ocean_current_velocity": .currentSpeed, "ocean_current_direction": .currentDirection,
+        "sea_surface_temperature": .seaSurfaceTemperature, "sea_level_height_msl": .seaLevel,
     ]
 
     public enum DecodeError: Error, Equatable { case invalid, api(String), countMismatch }

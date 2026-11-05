@@ -19,15 +19,16 @@ struct SpotsView: View {
     @State private var layer: MapLayer = .wind
     @State private var hourOffset = 0
     @State private var raster: FieldRaster?
-    @State private var particles = ParticleSystem()
+    @State private var particles = ParticleSystem(count: MapLayerSettings.density.count)
     @State private var region: MKCoordinateRegion?
+    @State private var showLayerSettings = false
     static let layerHours = 71
 
     var body: some View {
         ZStack(alignment: .bottom) {
             MapReader { proxy in
                 map.overlay {
-                    if layersOn { MapLayersOverlay(proxy: proxy, raster: raster, particles: particles, animate: layer.vector != nil) }
+                    if layersOn { MapLayersOverlay(proxy: proxy, raster: raster, particles: particles, animate: layer.vector != nil && MapLayerSettings.particles) }
                 }
             }
             .ignoresSafeArea(edges: .top)
@@ -35,7 +36,7 @@ struct SpotsView: View {
                 HStack(alignment: .top) {
                     if layersOn {
                         MapLayersControls(layer: $layer, hourOffset: $hourOffset, start: layerStart, hours: Self.layerHours,
-                                          loading: services.gridForecast.loading, error: services.gridForecast.lastError)
+                                          loading: services.gridForecast.loading, error: services.gridForecast.lastError, onSettings: { showLayerSettings = true })
                             .padding(.leading, DS.Spacing.l).padding(.top, DS.Spacing.l)
                     }
                     Spacer()
@@ -52,6 +53,11 @@ struct SpotsView: View {
             cards
         }
         .onChange(of: layer) { _, _ in rebuildRaster() }
+        .sheet(isPresented: $showLayerSettings, onDismiss: {
+            particles = ParticleSystem(count: MapLayerSettings.density.count)
+            if !MapLayerSettings.isEnabled(layer), let first = MapLayerSettings.enabled.first { layer = first }
+            rebuildRaster()
+        }) { NavigationStack { MapLayerSettingsView() }.preferredColorScheme(.dark).tint(DS.Color.accent) }
         .onChange(of: hourOffset) { _, _ in rebuildRaster() }
         .onChange(of: services.gridForecast.loading) { _, loading in if !loading { rebuildRaster() } }
         .onAppear {
@@ -128,6 +134,7 @@ struct SpotsView: View {
     private func toggleLayers() {
         layersOn.toggle()
         guard layersOn else { raster = nil; return }
+        if !MapLayerSettings.isEnabled(layer), let first = MapLayerSettings.enabled.first { layer = first }
         if let region {
             services.gridForecast.ensure(center: Coordinate(latitude: region.center.latitude, longitude: region.center.longitude))
         } else if let c = model.currentLocation ?? model.cards.first?.spot.coordinate {
@@ -145,7 +152,7 @@ struct SpotsView: View {
         let box = GeoBox(minLat: region.center.latitude - half, maxLat: region.center.latitude + half,
                          minLon: region.center.longitude - halfLon, maxLon: region.center.longitude + halfLon).expanded(by: 0.3)
         let time = layerStart.addingTimeInterval(Double(hourOffset) * 3600)
-        raster = FieldRaster.build(grid: grid, layer: layer, time: time, box: box)
+        raster = FieldRaster.build(grid: grid, layer: layer, time: time, box: box, opacity: MapLayerSettings.opacity)
     }
 
     private func roundButton(_ symbol: String, action: @escaping () -> Void) -> some View {

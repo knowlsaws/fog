@@ -17,6 +17,7 @@ struct SettingsView: View {
                 row("通知", system: "bell", trailing: notifyLabel) { NotificationSettingsView() }
                 row("判定", system: "fish", trailing: CoreMLSpeciesClassifier.modelVersion) { JudgementSettingsView() }
                 row("自動検出", system: "location", trailing: SessionDetectionService.sensitivity.label) { DetectionSettingsView() }
+                row("地図レイヤー", system: "square.3.layers.3d", trailing: "\(MapLayerSettings.enabled.count)/\(MapLayer.allCases.count)") { MapLayerSettingsView() }
                 row("情報源", system: "info.circle", trailing: "") { SourcesSettingsView() }
             }
             .listStyle(.plain)

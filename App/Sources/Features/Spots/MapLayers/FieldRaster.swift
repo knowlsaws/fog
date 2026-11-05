@@ -48,9 +48,9 @@ struct FieldRaster {
     }
 
     /// 色面と流れの格子を作る。`width`×`height` の画素、流れは `uvN` 刻み
-    static func build(grid: GridForecast, layer: MapLayer, time: Date, box: GeoBox, width: Int = 180, height: Int = 240, uvN: Int = 36) -> FieldRaster {
+    static func build(grid: GridForecast, layer: MapLayer, time: Date, box: GeoBox, opacity: Double = 0.72, width: Int = 180, height: Int = 240, uvN: Int = 36) -> FieldRaster {
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        let alpha: UInt8 = 185
+        let alpha = UInt8(max(0, min(255, opacity * 255)))
         for py in 0..<height {
             let y = 1 - (Double(py) + 0.5) / Double(height)
             for px in 0..<width {
@@ -58,7 +58,9 @@ struct FieldRaster {
                 guard let v = grid.sample(layer.scalar, at: box.coordinate(x: x, y: y), time: time) else { continue }
                 let c = layer.rgb(v)
                 let i = (py * width + px) * 4
-                pixels[i] = c.0; pixels[i + 1] = c.1; pixels[i + 2] = c.2; pixels[i + 3] = alpha
+                // premultipliedLast なので色にアルファを掛けておく
+                let a = Int(alpha)
+                pixels[i] = UInt8(Int(c.0) * a / 255); pixels[i + 1] = UInt8(Int(c.1) * a / 255); pixels[i + 2] = UInt8(Int(c.2) * a / 255); pixels[i + 3] = alpha
             }
         }
         var image: CGImage?

@@ -30,9 +30,16 @@ final class GridForecastTests: XCTestCase {
         XCTAssertTrue(s.contains("longitude=140.00,141.00,140.00,141.00"), s)
         XCTAssertTrue(s.contains("wind_speed_unit=ms"))
         XCTAssertTrue(s.contains("forecast_days=2"))
+        for f in ["cape", "visibility", "snowfall", "snow_depth", "uv_index", "cloud_cover_low"] { XCTAssertTrue(s.contains(f), f) }
         let m = OpenMeteoGrid.marineURL(latitudes: [41.0], longitudes: [140.0]).absoluteString
         XCTAssertTrue(m.hasPrefix("https://marine-api.open-meteo.com/v1/marine?"))
         XCTAssertTrue(m.contains("ocean_current_direction"))
+        for f in ["sea_level_height_msl", "wind_wave_direction", "secondary_swell_wave_height"] { XCTAssertTrue(m.contains(f), f) }
+        // 全変数に取得元の名前がある
+        let mapped = Set(OpenMeteoGrid.weatherMap.values).union(OpenMeteoGrid.marineMap.values)
+        XCTAssertEqual(mapped, Set(GridForecast.Variable.allCases))
+        XCTAssertEqual(Set(OpenMeteoGrid.weatherMap.keys), Set(OpenMeteoGrid.weatherFields))
+        XCTAssertEqual(Set(OpenMeteoGrid.marineMap.keys), Set(OpenMeteoGrid.marineFields))
     }
 
     func testSampleBilinearAndTime() {
@@ -65,15 +72,18 @@ final class GridForecastTests: XCTestCase {
     func testDecodeMultiPoint() throws {
         let json = """
         [
-         {"latitude":41.0,"longitude":140.0,"hourly":{"time":[1762300800,1762304400],"wind_speed_10m":[2,3],"wind_direction_10m":[350,350],"ocean_current_velocity":[3.6,7.2]}},
+         {"latitude":41.0,"longitude":140.0,"hourly":{"time":[1762300800,1762304400],"wind_speed_10m":[2,3],"wind_direction_10m":[350,350],"ocean_current_velocity":[3.6,7.2],"cape":[120,0],"visibility":[24140,800]}},
          {"latitude":41.0,"longitude":141.0,"hourly":{"time":[1762300800,1762304400],"wind_speed_10m":[4,5],"wind_direction_10m":[10,10],"ocean_current_velocity":[null,null]}}
         ]
         """
-        let g = try OpenMeteoGrid.decode(Data(json.utf8), latitudes: [41.0], longitudes: [140.0, 141.0])
+        let g = try OpenMeteoGrid.decode(Data(json.utf8), latitudes: [41.0], longitudes: [140.0, 141.0], fetchedAt: t0)
         XCTAssertEqual(g.times.count, 2)
         XCTAssertEqual(g.value(.windSpeed, timeIndex: 1, row: 0, col: 1), 5)
         XCTAssertEqual(g.value(.currentSpeed, timeIndex: 0, row: 0, col: 0)!, 1.0, accuracy: 1e-9)
         XCTAssertNil(g.value(.currentSpeed, timeIndex: 0, row: 0, col: 1))
+        XCTAssertEqual(g.value(.cape, timeIndex: 0, row: 0, col: 0), 120)
+        XCTAssertEqual(g.value(.visibility, timeIndex: 1, row: 0, col: 0), 800)
+        XCTAssertNil(g.value(.cape, timeIndex: 0, row: 0, col: 1))
         XCTAssertEqual(g.range(of: .windSpeed), 2...5)
         XCTAssertThrowsError(try OpenMeteoGrid.decode(Data(json.utf8), latitudes: [41.0, 42.0], longitudes: [140.0, 141.0]))
         XCTAssertThrowsError(try OpenMeteoGrid.decode(Data("{\"error\":true,\"reason\":\"bad\"}".utf8), latitudes: [41.0], longitudes: [140.0]))

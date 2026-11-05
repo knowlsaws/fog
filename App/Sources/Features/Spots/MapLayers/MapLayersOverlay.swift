@@ -19,7 +19,7 @@ struct MapLayersOverlay: View {
                 if let img = raster.image {
                     ctx.draw(Image(decorative: img, scale: 1), in: rect)
                 }
-                if raster.layer.vector != nil, animate {
+                if raster.layer.vector != nil, animate, MapLayerSettings.particles {
                     particles.step(raster: raster, now: timeline.date)
                     particles.draw(in: &ctx, rect: rect, layer: raster.layer)
                 }
@@ -37,13 +37,20 @@ struct MapLayersControls: View {
     let hours: Int
     let loading: Bool
     let error: String?
+    var onSettings: () -> Void = {}
     private let tz = TimeZone(identifier: "Asia/Tokyo") ?? .current
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.s) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DS.Spacing.xs) {
-                    ForEach(MapLayer.allCases) { l in
+                    Button(action: onSettings) {
+                        Image(systemName: "slider.horizontal.3").font(.system(size: 12, weight: .semibold)).foregroundStyle(DS.Color.textPrimary)
+                            .padding(.horizontal, DS.Spacing.s).padding(.vertical, 6)
+                            .background(DS.Color.panel.opacity(0.9), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    ForEach(MapLayerSettings.enabled) { l in
                         Button { layer = l } label: {
                             Text(l.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(layer == l ? DS.Color.background : DS.Color.textPrimary)
                                 .padding(.horizontal, DS.Spacing.m).padding(.vertical, 6)
@@ -66,7 +73,7 @@ struct MapLayersControls: View {
         HStack(spacing: 4) {
             LinearGradient(stops: layer.stops.map { Gradient.Stop(color: Color(red: $0.1.0, green: $0.1.1, blue: $0.1.2), location: $0.0) }, startPoint: .leading, endPoint: .trailing)
                 .frame(width: 90, height: 6).clipShape(Capsule())
-            Text("\(layer.format(layer.range.lowerBound))〜\(layer.format(layer.range.upperBound)) \(layer.unit)").font(.system(size: 9, weight: .semibold, design: .rounded)).foregroundStyle(DS.Color.textSecondary)
+            Text(layer == .fog ? "濃い＝視程が短い" : "\(layer.format(layer.range.lowerBound))〜\(layer.format(layer.range.upperBound)) \(layer.unit)").font(.system(size: 9, weight: .semibold, design: .rounded)).foregroundStyle(DS.Color.textSecondary)
         }
         .padding(.horizontal, DS.Spacing.s).padding(.vertical, 4)
         .background(DS.Color.panel.opacity(0.9), in: Capsule())
@@ -114,5 +121,62 @@ struct MapTimeBar: View {
     private func dayLabel(_ d: Int) -> String {
         let f = DateFormatter(); f.locale = Locale(identifier: "ja_JP"); f.timeZone = tz; f.dateFormat = "d(E)"
         return f.string(from: start.addingTimeInterval(Double(d) * 86_400))
+    }
+}
+
+/// 地図レイヤーの設定（F-43）：表示する層のオンオフ、粒子、濃さ。釣り場画面のチップ左端と設定から開く
+struct MapLayerSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var enabled: Set<MapLayer> = Set(MapLayerSettings.enabled)
+    @State private var particles = MapLayerSettings.particles
+    @State private var density = MapLayerSettings.density
+    @State private var opacity = MapLayerSettings.opacity
+
+    var body: some View {
+        List {
+            ForEach(MapLayer.Group.allCases, id: \.self) { g in
+                Section {
+                    ForEach(MapLayer.allCases.filter { $0.group == g }) { l in
+                        Toggle(isOn: Binding(get: { enabled.contains(l) }, set: { on in
+                            if on { enabled.insert(l) } else { enabled.remove(l) }
+                            MapLayerSettings.setEnabled(on, l)
+                        })) {
+                            HStack(spacing: DS.Spacing.s) {
+                                LinearGradient(stops: l.stops.map { Gradient.Stop(color: Color(red: $0.1.0, green: $0.1.1, blue: $0.1.2), location: $0.0) }, startPoint: .leading, endPoint: .trailing)
+                                    .frame(width: 28, height: 6).clipShape(Capsule())
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(l.title + (l.vector != nil ? "（粒子）" : "")).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                                    if !l.detail.isEmpty { Text(l.detail).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) }
+                                }
+                            }
+                        }
+                        .tint(DS.Color.accent)
+                        .listRowBackground(DS.Color.background).listRowSeparatorTint(DS.Color.surfaceRaised)
+                    }
+                } header: { Text(g.rawValue).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) }
+            }
+            Section {
+                Toggle(isOn: $particles) { Text("粒子を動かす").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary) }
+                    .tint(DS.Color.accent).listRowBackground(DS.Color.background).listRowSeparatorTint(DS.Color.surfaceRaised)
+                    .onChange(of: particles) { _, v in MapLayerSettings.particles = v }
+                Picker("粒子の数", selection: $density) {
+                    ForEach(MapLayerSettings.Density.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented).listRowBackground(DS.Color.background)
+                .onChange(of: density) { _, v in MapLayerSettings.density = v }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("色の濃さ").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                    Slider(value: $opacity, in: 0.3...1.0).tint(DS.Color.accent)
+                        .onChange(of: opacity) { _, v in MapLayerSettings.opacity = v }
+                }
+                .listRowBackground(DS.Color.background).listRowSeparatorTint(DS.Color.surfaceRaised)
+            } header: { Text("表示").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary) }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(DS.Color.background)
+        .navigationTitle("地図レイヤー")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(DS.Color.textSecondary) } } }
     }
 }
