@@ -112,6 +112,13 @@ struct SpotsView: View {
                         SpotMarker(card: card, selected: selectedID == card.spot.id, zoomedIn: zoomedIn)
                     }
                     .buttonStyle(.plain)
+                    // 同じ場所の釣果情報は点の上に載せる（重なって隠れないように。2026-11-05 実機フィードバック）
+                    .overlay(alignment: .top) {
+                        if let p = feedPin(for: card) {
+                            Button { feedPin = p } label: { FeedPinMarker(pin: p) }.buttonStyle(.plain)
+                                .offset(y: zoomedIn ? -40 : -24)
+                        }
+                    }
                 }
             }
             if let c = model.currentLocation {
@@ -119,9 +126,9 @@ struct SpotsView: View {
                     Circle().fill(.white).frame(width: 10, height: 10).overlay(Circle().stroke(DS.Color.background, lineWidth: 2))
                 }
             }
-            // RSS の記事から拾った釣果（F-44）：場所ごとに 1 つ。新しいほど濃い
+            // RSS の記事から拾った釣果（F-44）：場所ごとに 1 つ。新しいほど濃い。釣り場の点と同じ場所のものは点の上に載せる（上）
             if feedPinsOn {
-                ForEach(feedPins) { pin in
+                ForEach(standalonePins) { pin in
                     Annotation("", coordinate: pin.coordinate.cl, anchor: .bottom) {
                         Button { feedPin = pin } label: { FeedPinMarker(pin: pin) }.buttonStyle(.plain)
                     }
@@ -145,6 +152,18 @@ struct SpotsView: View {
     }
 
     // MARK: 釣果情報のピン（F-44）
+
+    /// 釣り場の点（登録済み・候補）と同じ場所（80 m 以内）の釣果情報
+    private func feedPin(for card: SpotsViewModel.Card) -> FeedCatchExtractor.Pin? {
+        guard feedPinsOn else { return nil }
+        return feedPins.first { Geo.distanceMeters($0.coordinate, card.spot.coordinate) < 80 }
+    }
+
+    /// 釣り場の点が無い場所の釣果情報だけ、単独のピンにする
+    private var standalonePins: [FeedCatchExtractor.Pin] {
+        let cards = model.allCards.filter { $0.spot.coordinate.isPlausible }
+        return feedPins.filter { p in !cards.contains { Geo.distanceMeters($0.spot.coordinate, p.coordinate) < 80 } }
+    }
 
     private func toggleFeedPins() {
         feedPinsOn.toggle()
