@@ -1,0 +1,105 @@
+import Foundation
+
+/// RSS の記事から「どこで何が釣れたか」を取り出す（F-44）。見出しと要約だけを使い、通信はしない。
+/// 場所は同梱の港名と登録釣り場の名前、魚種は図鑑の標準和名と別名を文中から探す。
+public struct FeedCatch: Hashable, Sendable, Identifiable {
+    public var id: String { itemID + "@" + placeName }
+    public var itemID: String
+    public var title: String
+    public var link: String?
+    public var publishedAt: Date?
+    public var feedTitle: String
+    public var placeName: String
+    public var coordinate: Coordinate
+    /// 文中に出た順。書かれた言葉のまま（アブラコ など）
+    public var species: [String]
+
+    public init(itemID: String, title: String, link: String?, publishedAt: Date?, feedTitle: String, placeName: String, coordinate: Coordinate, species: [String]) {
+        self.itemID = itemID; self.title = title; self.link = link; self.publishedAt = publishedAt; self.feedTitle = feedTitle
+        self.placeName = placeName; self.coordinate = coordinate; self.species = species
+    }
+}
+
+public enum FeedCatchExtractor {
+    public struct Place: Hashable, Sendable {
+        public var name: String
+        public var coordinate: Coordinate
+        public init(name: String, coordinate: Coordinate) { self.name = name; self.coordinate = coordinate }
+    }
+
+    /// 場所の候補を作る：登録釣り場（2 文字以上）＋港（3 文字以上）。同じ名前の港が複数あれば `near` に近いものだけ残す
+    public static func places(spots: [(name: String, coordinate: Coordinate)], ports: [Port], near: Coordinate?) -> [Place] {
+        var byName: [String: Place] = [:]
+        for p in ports where p.name.count >= 3 {
+            let cand = Place(name: p.name, coordinate: p.coordinate)
+            if let existing = byName[p.name] {
+                if let near, Geo.distanceMeters(cand.coordinate, near) < Geo.distanceMeters(existing.coordinate, near) { byName[p.name] = cand }
+            } else { byName[p.name] = cand }
+        }
+        // 登録釣り場は港より優先（自分の呼び名で上書き）
+        for s in spots where s.name.count >= 2 && s.name != "釣り場" && s.name != "位置不明" {
+            byName[s.name] = Place(name: s.name, coordinate: s.coordinate)
+        }
+        // 長い名前から当てる（「函館港」より「函館漁港」を先に）
+        return byName.values.sorted { $0.name.count > $1.name.count }
+    }
+
+    /// 魚種の語：標準和名と別名。長い順
+    public static func speciesWords(_ catalog: [Species]) -> [String] {
+        Array(Set(catalog.flatMap { [$0.name] + $0.aliases })).filter { $0.count >= 2 }.sorted { $0.count > $1.count }
+    }
+
+    /// 1 記事から、文中に出た場所ごとに 1 件。場所が無ければ空
+    public static func extract(_ item: FeedItem, places: [Place], speciesWords: [String]) -> [FeedCatch] {
+        let text = item.title + " " + (item.summary ?? "")
+        guard !text.isEmpty else { return [] }
+        // 場所：長い名前から。見つけた名前を含む短い名前は重複として除く（「函館漁港」があれば「函館港」は別物なので除かないが、「鹿部漁港」→「鹿部」のような包含だけ除く）
+        var found: [Place] = []
+        var consumed = text
+        for p in places where consumed.contains(p.name) {
+            found.append(p)
+            consumed = consumed.replacingOccurrences(of: p.name, with: String(repeating: "　", count: p.name.count))
+        }
+        guard !found.isEmpty else { return [] }
+        // 魚種：出た順。同じ語は 1 回
+        var species: [(Int, String)] = []
+        var remaining = text
+        for w in speciesWords {
+            if let r = remaining.range(of: w) {
+                species.append((remaining.distance(from: remaining.startIndex, to: r.lowerBound), w))
+                remaining = remaining.replacingOccurrences(of: w, with: String(repeating: "　", count: w.count))
+            }
+        }
+        let names = species.sorted { $0.0 < $1.0 }.map(\.1)
+        return found.map { p in
+            FeedCatch(itemID: item.id, title: item.title, link: item.link, publishedAt: item.publishedAt, feedTitle: item.feedTitle,
+                      placeName: p.name, coordinate: p.coordinate, species: names)
+        }
+    }
+
+    /// 場所ごとにまとめたピン（新しい順の記事を持つ）
+    public struct Pin: Hashable, Sendable, Identifiable {
+        public var id: String { placeName }
+        public var placeName: String
+        public var coordinate: Coordinate
+        public var entries: [FeedCatch]
+        /// 直近の記事の日付
+        public var latestAt: Date? { entries.compactMap(\.publishedAt).max() }
+        /// 魚種の集計（多い順）
+        public var speciesCounts: [(String, Int)] {
+            var c: [String: Int] = [:]
+            for e in entries { for s in Set(e.species) { c[s, default: 0] += 1 } }
+            return c.sorted { $0.value > $1.value || ($0.value == $1.value && $0.key < $1.key) }.map { ($0.key, $0.value) }
+        }
+        public static func == (l: Pin, r: Pin) -> Bool { l.placeName == r.placeName && l.entries == r.entries }
+        public func hash(into h: inout Hasher) { h.combine(placeName) }
+    }
+
+    public static func pins(_ catches: [FeedCatch]) -> [Pin] {
+        var byPlace: [String: [FeedCatch]] = [:]
+        for c in catches { byPlace[c.placeName, default: []].append(c) }
+        return byPlace.map { name, list in
+            Pin(placeName: name, coordinate: list[0].coordinate, entries: list.sorted { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) })
+        }.sorted { ($0.latestAt ?? .distantPast) > ($1.latestAt ?? .distantPast) }
+    }
+}
