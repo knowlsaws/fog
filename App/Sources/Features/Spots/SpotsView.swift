@@ -700,6 +700,11 @@ struct FeedPinSheet: View {
 /// 地図のメモの印（F-52）：黄色い付箋に先頭の文字
 struct NoteMarker: View {
     let note: Core.Note
+    /// 釣果情報と同じく、古いほど薄い（7 日まで 1.0、14 日まで 0.75、それ以降 0.45）
+    private var opacity: Double {
+        let age = Date().timeIntervalSince(note.createdAt)
+        return age < 7 * 86_400 ? 1 : (age < 14 * 86_400 ? 0.75 : 0.45)
+    }
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 3) {
@@ -712,6 +717,7 @@ struct NoteMarker: View {
             Triangle().fill(DS.Color.sun).frame(width: 8, height: 5)
         }
         .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+        .opacity(opacity)
     }
 
     struct Triangle: Shape {
