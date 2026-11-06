@@ -165,6 +165,21 @@ final class HomeViewModel {
         self.services = services
     }
 
+    /// ワンタップの開始・終了（F-48）。開始できなかった（位置が決められない）ときは false
+    @discardableResult
+    func toggleSession() async -> Bool {
+        guard let services else { return false }
+        let ok: Bool
+        if isRecording {
+            await services.detection.endManually()
+            ok = true
+        } else {
+            ok = await services.detection.startManually()
+        }
+        await refresh()
+        return ok
+    }
+
     /// 全部を計算し直す（起動時・30 秒ごと・釣り場切替・ストア変更時）。
     func refresh(now: Date = .now) async {
         guard let services else { return }

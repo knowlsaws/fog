@@ -12,6 +12,8 @@ struct HomeView: View {
     @State private var showMoon = false
     @State private var showFeed = false
     @State private var chipDetail: HomeViewModel.Chip?
+    @State private var showStartFailed = false
+    @State private var toggling = false
 
     var body: some View {
         GeometryReader { geo in
@@ -51,6 +53,36 @@ struct HomeView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showMoon) { MoonSheet(model: model).presentationDetents([.medium]) }
         .sheet(isPresented: $showFeed) { FeedView(keywords: model.feedKeywords()).presentationDetents([.large]) }
+        .alert("位置が分かりません", isPresented: $showStartFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("位置情報を許可するか、ホームの釣り場を選んでからもう一度押してください")
+        }
+    }
+
+    // MARK: ワンタップの開始・終了（F-48）
+
+    private var sessionButton: some View {
+        Button {
+            guard !toggling else { return }
+            toggling = true
+            Task {
+                let ok = await model.toggleSession()
+                toggling = false
+                if !ok { showStartFailed = true }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: model.isRecording ? "stop.fill" : "play.fill").font(.system(size: 9, weight: .bold))
+                Text(model.isRecording ? "終了" : "開始").font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(model.isRecording ? DS.Color.textPrimary : DS.Color.background)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(model.isRecording ? DS.Color.panel : DS.Color.accent, in: Capsule())
+            .opacity(toggling ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(model.isRecording ? "釣行を終了" : "釣行を開始")
     }
 
     // MARK: 釣果情報（F-27）の 1 行。タップで一覧
@@ -133,6 +165,7 @@ struct HomeView: View {
                 Text(model.now, format: .dateTime.hour().minute()).font(DS.Font.number(14)).foregroundStyle(DS.Color.textTertiary)
             }
             Spacer()
+            sessionButton.frame(height: 32)
             Button { showMoon = true } label: {
                 Image(systemName: MoonSymbol.name(age: model.moonAge)).font(.system(size: 20)).foregroundStyle(DS.Color.moon).frame(height: 32)
             }
