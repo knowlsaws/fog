@@ -35,10 +35,6 @@ struct SessionDetailView: View {
             }
             .padding(DS.Spacing.l)
         }
-        .background(alignment: .trailing) {
-            // テーマのキャラクター（転スラ：リムル）。内容の後ろ、背景画像の前に置く
-            ThemeCharacter(name: .charDetail, baseWidth: 220).padding(.top, 260)
-        }
         .background(ThemeBackground(name: .bgDetail))
         .task { computeReview() }
     }
