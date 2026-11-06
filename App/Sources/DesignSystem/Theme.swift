@@ -182,7 +182,7 @@ enum ThemeAssets {
 
     private static var cache: [String: Loaded?] = [:]
 
-    static func clear() { cache.removeAll() }
+    static func clear() { cache.removeAll(); circleCache.removeAll() }
 
     static func image(_ name: Name) -> UIImage? { load(name)?.image }
     static func has(_ name: Name) -> Bool { load(name) != nil }
@@ -312,6 +312,30 @@ enum ThemeAssets {
             if h < 0 { h += 360 }
         }
         return (h, mx == 0 ? 0 : d / mx, mx)
+    }
+
+    // MARK: ホームの円の位置（画像ごとの JSON）
+
+    /// 画像の中で「釣れ率の円」が占める位置と大きさ（画像の幅・高さに対する割合）。`<name>.json` に `{"cx":0.5,"cy":0.6,"d":0.4}` で置く
+    struct CircleSpec: Decodable {
+        var cx: Double = 0.5
+        var cy: Double = 0.5
+        var d: Double = 0.44
+    }
+
+    private static var circleCache: [String: CircleSpec] = [:]
+
+    static func circle(_ name: Name) -> CircleSpec {
+        let theme = ThemeStore.shared.theme
+        let key = "\(theme.rawValue)/\(name.rawValue)"
+        if let c = circleCache[key] { return c }
+        var spec = CircleSpec()
+        if let url = Bundle.main.url(forResource: name.rawValue, withExtension: "json", subdirectory: "Themes/\(theme.rawValue)"),
+           let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(CircleSpec.self, from: data) {
+            spec = decoded
+        }
+        circleCache[key] = spec
+        return spec
     }
 
     // MARK: キャラクターの位置の微調整（設定 > テーマ）
