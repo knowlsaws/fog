@@ -185,19 +185,19 @@ struct HomeView: View {
             ZStack {
                 // 円は常に画面中央（魚種別の数字があっても動かさない）
                 ZStack {
-                    // テーマのキャラクター（円を両手で囲む）。画像の中の円（char_home.json の cx/cy/d）が釣れ率の円にぴったり重なるように拡大と位置を決める
+                    // 魔法の光と飾り枠はキャラクターより後ろ（顔を隠さない）
+                    if ThemeStore.shared.theme.hasAssets { MagicGlow().padding(-DS.Spacing.xl) }
+                    ThemeOrnament(name: .ringHome).padding(-DS.Spacing.l)
+                    // テーマのキャラクター（円を両手で囲む）。画像の中の円（char_home.json の cx/cy/d）が釣れ率の円に重なるように拡大と位置を決める。
+                    // 円を少し大きめ（1.12 倍）に合わせ、手が輪の外側を抱えて顔が輪の上に出るようにする
                     GeometryReader { g in
                         let spec = ThemeAssets.circle(.charHome)
                         let size = ThemeAssets.image(.charHome)?.size ?? CGSize(width: 16, height: 9)
-                        let imageH = g.size.height / spec.d
+                        let imageH = g.size.height * 1.12 / spec.d
                         let imageW = imageH * size.width / size.height
                         ThemeCharacter(name: .charHome, baseWidth: imageW)
                             .position(x: g.size.width / 2 + (0.5 - spec.cx) * imageW, y: g.size.height / 2 + (0.5 - spec.cy) * imageH)
                     }
-                    // 魔法の光（画像テーマのときだけ）
-                    if ThemeStore.shared.theme.hasAssets { MagicGlow().padding(-DS.Spacing.xl) }
-                    // テーマの飾り枠（魔導書など。黒背景の絵を透かして重ねる）
-                    ThemeOrnament(name: .ringHome).padding(-DS.Spacing.l)
                     // 下が開いた 270° のゲージ（確定画像）。トラックは暗いグレー
                     Circle().trim(from: 0, to: 0.75)
                         .stroke(DS.Color.textPrimary.opacity(0.16), style: StrokeStyle(lineWidth: 12, lineCap: .round))
