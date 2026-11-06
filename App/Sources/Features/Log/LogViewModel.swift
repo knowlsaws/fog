@@ -84,6 +84,10 @@ final class LogViewModel {
     /// 長押しで誤検出の釣行を削除（分析に即時反映）。
     func delete(_ session: Core.Session) {
         guard let services else { return }
+        // 自動検出で釣果の無い釣行を消すのは誤検出の合図とみなし、その場所では自動で始めないようにする
+        if session.isAutoDetected, session.catches.isEmpty {
+            SessionDetectionService.exclude(session: session, spot: try? services.store.spot(id: session.spotID))
+        }
         try? services.store.deleteSession(id: session.id)
         refresh()
     }

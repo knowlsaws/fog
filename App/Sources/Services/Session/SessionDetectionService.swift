@@ -104,6 +104,8 @@ final class SessionDetectionService {
         if let registered, Geo.distanceMeters(registered.coordinate, fix.coordinate) <= Self.registeredSpotRadiusM {
             return .init(registeredSpotID: registered.id, nearShore: true)
         }
+        // 「誤検出なので破棄」した場所（自宅など）では始めない
+        if Self.isExcluded(fix.coordinate) { return .init(registeredSpotID: nil, nearShore: false) }
         // 走行中は逆ジオコーディングしない（無駄な通信を避ける）
         if (fix.speedMS ?? 0) >= detector.settings.drivingSpeedMS { return .init(registeredSpotID: nil, nearShore: nil) }
         let info = await shore.info(for: fix.coordinate)
@@ -254,8 +256,30 @@ final class SessionDetectionService {
         await endManually()
     }
 
-    /// 「誤検出なので破棄」：釣行を削除する（削除は分析に即時反映）。
+    // MARK: 除外した場所（誤検出の学習）
+
+    static let excludedKey = "fog.detection.excludedMeshes"
+
+    /// 500 m メッシュのキー（ShoreOracle と同じ刻み）
+    static func exclusionKey(_ c: Coordinate) -> String { String(format: "%.3f,%.3f", (c.latitude * 200).rounded() / 200, (c.longitude * 200).rounded() / 200) }
+    static var excludedMeshes: [String] {
+        get { UserDefaults.standard.stringArray(forKey: excludedKey) ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: excludedKey) }
+    }
+    static func isExcluded(_ c: Coordinate) -> Bool { excludedMeshes.contains(exclusionKey(c)) }
+    /// 自動検出の釣行を破棄・削除したら、その場所（開始地点と立ち位置のメッシュ）を除外に加える
+    static func exclude(session: Core.Session, spot: Spot?) {
+        var keys = Set(excludedMeshes)
+        for c in session.track.map(\.coordinate) + [spot?.coordinate].compactMap({ $0 }) where c.isPlausible { keys.insert(exclusionKey(c)) }
+        excludedMeshes = Array(keys)
+    }
+    static func clearExclusions() { excludedMeshes = [] }
+
+    /// 「誤検出なので破棄」：釣行を削除し、その場所では自動で始めないようにする（削除は分析に即時反映）。
     func discard(sessionID: UUID) {
+        if let session = try? store.session(id: sessionID), session.isAutoDetected {
+            Self.exclude(session: session, spot: try? store.spot(id: session.spotID))
+        }
         if activeSessionID == sessionID {
             scheduler.stop()
             SafetyNotifier.cancel()

@@ -24,18 +24,34 @@ final class ShoreOracle {
         if let cached = cache[k], Date().timeIntervalSince(cached.at) < 30 * 86_400 { return cached }
         let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         guard let placemark = try? await geocoder.reverseGeocodeLocation(location).first else { return nil }
-        let texts = [placemark.name, placemark.thoroughfare, placemark.subLocality, placemark.locality].compactMap { $0 } + (placemark.areasOfInterest ?? [])
+        // 地名（七重浜・大浜町など）には「浜」「港」が入るので、施設名（POI）だけをキーワード判定に使う
+        let poiTexts = (placemark.areasOfInterest ?? []) + [placemark.name].compactMap { $0 }.filter { $0 != placemark.thoroughfare && $0 != placemark.subLocality }
         var near = placemark.ocean != nil || placemark.inlandWater != nil
         var name: String? = placemark.areasOfInterest?.first ?? placemark.name
-        if !near, texts.contains(where: { t in Self.keywords.contains { t.contains($0) } }) { near = true }
+        if !near, poiTexts.contains(where: { t in Self.keywords.contains { t.contains($0) } }) { near = true }
         if !near, let port = await nearestPort(around: coordinate) {
             near = true
             name = port
         }
+        // 周囲 250 m の 4 点が海か水面なら海岸線のすぐそば
+        if !near { near = await coastWithin(meters: 250, of: coordinate) }
         if name == nil { name = placemark.locality ?? placemark.subLocality }
         let info = Info(nearShore: near, nameCandidate: name, at: Date())
         cache[k] = info
         return info
+    }
+
+    /// 東西南北 `meters` 先のどれかが海（または湖・川）なら true。逆ジオコーディング 4 回（結果はメッシュでキャッシュされる）
+    private func coastWithin(meters: Double, of c: Coordinate) async -> Bool {
+        let dLat = meters / 111_320
+        let dLon = meters / (111_320 * cos(c.latitude * .pi / 180))
+        let points = [Coordinate(latitude: c.latitude + dLat, longitude: c.longitude), Coordinate(latitude: c.latitude - dLat, longitude: c.longitude),
+                      Coordinate(latitude: c.latitude, longitude: c.longitude + dLon), Coordinate(latitude: c.latitude, longitude: c.longitude - dLon)]
+        for p in points {
+            let location = CLLocation(latitude: p.latitude, longitude: p.longitude)
+            if let mark = try? await geocoder.reverseGeocodeLocation(location).first, mark.ocean != nil || mark.inlandWater != nil { return true }
+        }
+        return false
     }
 
     /// 400 m 以内の漁港・港（MapKit の POI 検索、オンライン時のみ）。
