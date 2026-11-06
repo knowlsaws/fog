@@ -96,11 +96,17 @@ struct RootTabView: View {
         } label: {
             Group {
                 if ThemeAssets.has(Self.ornament(for: tab)) {
-                    // テーマのアイコン（黒背景の絵を透かして重ねる）。選択中は明るく、他は暗く
-                    ThemeOrnament(name: Self.ornament(for: tab))
-                        .frame(width: 36, height: 36)
-                        .opacity(selected == tab ? 1 : 0.45)
-                        .shadow(color: selected == tab ? DS.Color.accent.opacity(0.6) : .clear, radius: 8)
+                    // テーマのアイコン。選択中はテーマ色の丸い座布団と影で持ち上げ、他は少し薄く
+                    ZStack {
+                        if selected == tab {
+                            Circle().fill(DS.Color.accent.opacity(0.22)).frame(width: 50, height: 50)
+                        }
+                        ThemeOrnament(name: Self.ornament(for: tab))
+                            .frame(width: 40, height: 40)
+                            .saturation(selected == tab ? 1 : 0.7)
+                            .opacity(selected == tab ? 1 : 0.7)
+                            .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                    }
                 } else {
                     Image(systemName: selected == tab ? system + ".fill" : system)
                         .font(.system(size: 22, weight: .regular))
@@ -116,9 +122,10 @@ struct RootTabView: View {
         Button { selected = .capture } label: {
             ZStack {
                 if ThemeAssets.has(.tabCamera) {
-                    Circle().fill(DS.Color.secondary.opacity(0.35)).frame(width: 56, height: 56)
-                        .shadow(color: DS.Color.secondary.opacity(0.7), radius: 14)
-                    ThemeOrnament(name: .tabCamera).frame(width: 60, height: 60)
+                    Circle().fill(DS.Color.accent).frame(width: 58, height: 58)
+                        .shadow(color: DS.Color.accent.opacity(0.55), radius: 12)
+                    ThemeOrnament(name: .tabCamera).frame(width: 44, height: 44)
+                        .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
                 } else {
                     Circle().fill(DS.Color.accent).frame(width: 56, height: 56)
                         .shadow(color: DS.Color.accent.opacity(0.55), radius: 12)
