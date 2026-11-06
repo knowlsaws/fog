@@ -8,14 +8,7 @@ struct AssistantView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var input = ""
     @State private var recorder = SpeechRecorder()
-    @State private var mode: Mode = .ask
     @State private var working = false
-
-    enum Mode: String, CaseIterable, Identifiable {
-        case ask, shop
-        var id: String { rawValue }
-        var label: String { self == .ask ? "聞く" : "お店の話を記録" }
-    }
 
     var body: some View {
         let assistant = services.assistant
@@ -26,7 +19,6 @@ struct AssistantView: View {
                 Button { assistant.clear() } label: { Image(systemName: "trash").foregroundStyle(DS.Color.textTertiary) }.buttonStyle(.plain)
                 Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(DS.Color.textSecondary) }.buttonStyle(.plain).padding(.leading, DS.Spacing.m)
             }
-            Picker("", selection: $mode) { ForEach(Mode.allCases) { Text($0.label).tag($0) } }.pickerStyle(.segmented)
             if let reason = assistant.unavailableReason {
                 Text(reason).font(DS.Font.caption).foregroundStyle(DS.Color.holiday)
             }
@@ -34,8 +26,7 @@ struct AssistantView: View {
                 ScrollView {
                     VStack(spacing: DS.Spacing.s) {
                         if assistant.messages.isEmpty {
-                            Text(mode == .ask ? "例：今週いちばん釣れそうな日は？／鹿部で何が釣れた？／先月の釣果は？"
-                                 : "マイクを押して、お店の人の話をそのまま録音。止めると場所ごとに整理して地図にメモを置きます")
+                            Text("文字か声で、質問も記録もそのまま。\n質問の例：明日の鹿部はどう？／先月の釣果は？\n記録の例：鹿部で先週ホッケが好調らしい（店の人の話をそのまま話してもよい）。場所ごとに整理して地図にメモを置きます")
                                 .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).frame(maxWidth: .infinity, alignment: .leading)
                         }
                         ForEach(assistant.messages) { m in
@@ -64,7 +55,7 @@ struct AssistantView: View {
             }
             if let e = recorder.error { Text(e).font(DS.Font.caption).foregroundStyle(DS.Color.holiday) }
             HStack(spacing: DS.Spacing.s) {
-                TextField(mode == .ask ? "アプリの記録について聞く" : "聞いた話を打ち込んでも整理できます", text: $input, axis: .vertical)
+                TextField("質問、または記録したい話", text: $input, axis: .vertical)
                     .lineLimit(1...4)
                     .font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
                     .padding(DS.Spacing.m).background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip))
@@ -101,14 +92,18 @@ struct AssistantView: View {
         guard !t.isEmpty else { return }
         input = ""
         let assistant = services.assistant
-        switch mode {
-        case .ask:
-            let context = AssistantContext.build(services: services, home: home)
-            Task { await assistant.ask(t, context: context) }
-        case .shop:
-            working = true
+        working = true
+        Task {
+            // 質問か記録かは内容から判定する（タブは無い）
+            let intent = await assistant.classify(t)
+            if intent == .question {
+                let context = await AssistantContext.build(services: services, home: home, question: t)
+                working = false
+                await assistant.ask(t, context: context)
+                return
+            }
             assistant.append(user: t)
-            Task {
+            do {
                 let spots = ((try? services.store.spots()) ?? []).filter(\.isRegistered).map(\.name)
                 let items = await assistant.organizeShopTalk(t, hintPlaces: spots)
                 var made: [String] = []

@@ -149,7 +149,12 @@ struct SpotsView: View {
                     // 同じ場所の釣果情報は点の上に載せる。overlay で外にはみ出すとタップできないので、
                     // 縦に並べて下に同じ高さの空白を置き、点の中心を座標に合わせる（2026-11-05 実機フィードバック）
                     let badge = feedPin(for: card)
+                    let note = note(for: card)
                     VStack(spacing: 2) {
+                        // 同じ場所のメモ（F-52）と釣果情報は点の上に縦に積む。下に同じ高さの空白を置いて点の中心を座標に合わせる
+                        if let n = note {
+                            Button { selectedNote = n } label: { NoteMarker(note: n) }.buttonStyle(.plain)
+                        }
                         if let p = badge {
                             Button { feedPin = p } label: { FeedPinMarker(pin: p) }.buttonStyle(.plain)
                         }
@@ -158,6 +163,7 @@ struct SpotsView: View {
                         }
                         .buttonStyle(.plain)
                         if badge != nil { Color.clear.frame(height: FeedPinMarker.height + 2) }
+                        if note != nil { Color.clear.frame(height: NoteMarker.height + 2) }
                     }
                 }
             }
@@ -166,8 +172,8 @@ struct SpotsView: View {
                     Circle().fill(.white).frame(width: 10, height: 10).overlay(Circle().stroke(DS.Color.background, lineWidth: 2))
                 }
             }
-            // 地図のメモ（F-52）：黄色い付箋。タップで内容・編集・削除
-            ForEach(notes) { note in
+            // 地図のメモ（F-52）：黄色い付箋。タップで内容・編集・削除。釣り場の点と同じ場所のものは点の上に積む（上）
+            ForEach(standaloneNotes) { note in
                 Annotation("", coordinate: note.coordinate.cl, anchor: .bottom) {
                     Button { selectedNote = note } label: { NoteMarker(note: note) }.buttonStyle(.plain)
                 }
@@ -206,6 +212,17 @@ struct SpotsView: View {
     }
 
     /// 釣り場の点が無い場所の釣果情報だけ、単独のピンにする
+    /// 釣り場の点と同じ場所（80 m）のメモ。複数あれば新しいもの
+    private func note(for card: SpotsViewModel.Card) -> Core.Note? {
+        notes.filter { Geo.distanceMeters($0.coordinate, card.spot.coordinate) < 80 }.max { $0.createdAt < $1.createdAt }
+    }
+
+    /// 釣り場の点と重ならないメモ
+    private var standaloneNotes: [Core.Note] {
+        let cards = model.allCards.filter { $0.spot.coordinate.isPlausible }
+        return notes.filter { n in !cards.contains { Geo.distanceMeters($0.spot.coordinate, n.coordinate) < 80 } }
+    }
+
     private var standalonePins: [FeedCatchExtractor.Pin] {
         let cards = model.allCards.filter { $0.spot.coordinate.isPlausible }
         return feedPins.filter { p in !cards.contains { Geo.distanceMeters($0.spot.coordinate, p.coordinate) < 80 } }
@@ -699,7 +716,13 @@ struct FeedPinSheet: View {
 
 /// 地図のメモの印（F-52）：黄色い付箋に先頭の文字
 struct NoteMarker: View {
+    static let height: CGFloat = 27
     let note: Core.Note
+    /// 釣果情報と同じく、古いほど薄い（7 日まで 1.0、14 日まで 0.75、それ以降 0.45）
+    private var opacity: Double {
+        let age = Date().timeIntervalSince(note.createdAt)
+        return age < 7 * 86_400 ? 1 : (age < 14 * 86_400 ? 0.75 : 0.45)
+    }
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 3) {
@@ -712,6 +735,7 @@ struct NoteMarker: View {
             Triangle().fill(DS.Color.sun).frame(width: 8, height: 5)
         }
         .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+        .opacity(opacity)
     }
 
     struct Triangle: Shape {

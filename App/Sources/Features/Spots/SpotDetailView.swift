@@ -15,18 +15,42 @@ struct SpotDetailView: View {
     @State private var confirmDelete = false
     /// この釣り場に固定したホームの計算（推移グラフ・時刻表・週、F-51）
     @State private var detailModel = HomeViewModel()
+    // 地図のメモ（F-52）：この釣り場の周り 1.5 km の付箋。置くモードでタップした場所に置く
+    @State private var notes: [Core.Note] = []
+    @State private var placingNote = false
+    @State private var noteDraft: NoteDraft?
+    @State private var selectedNote: Core.Note?
+    struct NoteDraft: Identifiable { let id = UUID(); let coordinate: Coordinate }
 
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: DS.Spacing.s) {
                 ZStack(alignment: .topTrailing) {
                     heatmap.frame(height: geo.size.height * 0.22)
+                    if placingNote {
+                        VStack {
+                            Text("地図をタップしてメモを置く").font(DS.Font.caption).foregroundStyle(DS.Color.background)
+                                .padding(.horizontal, DS.Spacing.m).padding(.vertical, 6).background(DS.Color.accent, in: Capsule())
+                                .padding(.top, DS.Spacing.l)
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .allowsHitTesting(false)
+                    }
+                    HStack(spacing: DS.Spacing.s) {
+                        Button { placingNote.toggle() } label: {
+                            Image(systemName: placingNote ? "xmark.circle.fill" : "note.text.badge.plus").font(.system(size: 22))
+                                .foregroundStyle(placingNote ? DS.Color.holiday : DS.Color.textPrimary)
+                        }
+                        .buttonStyle(.plain)
                     Menu {
                         Button("名前を変える") { newName = card.spot.name; renaming = true }
                         Button("削除", role: .destructive) { confirmDelete = true }
                     } label: {
-                        Image(systemName: "ellipsis.circle.fill").font(.system(size: 22)).foregroundStyle(DS.Color.textPrimary).padding(DS.Spacing.l)
+                        Image(systemName: "ellipsis.circle.fill").font(.system(size: 22)).foregroundStyle(DS.Color.textPrimary)
                     }
+                    }
+                    .padding(DS.Spacing.l)
                 }
                 VStack(alignment: .leading, spacing: DS.Spacing.m) {
                     HStack(alignment: .firstTextBaseline) {
@@ -72,8 +96,16 @@ struct SpotDetailView: View {
             }
         }
         .background(ThemeBackground(name: .bgDetail))
+        .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in reloadNotes() }
+        .sheet(item: $noteDraft) { draft in
+            NoteEditSheet(coordinate: draft.coordinate, existing: nil, placeHint: card.spot.name).presentationDetents([.medium])
+        }
+        .sheet(item: $selectedNote) { note in
+            NoteEditSheet(coordinate: note.coordinate, existing: note, placeHint: note.placeName ?? card.spot.name).presentationDetents([.medium])
+        }
         .onAppear {
             reload()
+            reloadNotes()
             detailModel.fixedSpotID = card.spot.id
             detailModel.isEmbedded = true
             detailModel.attach(services)
@@ -148,17 +180,34 @@ struct SpotDetailView: View {
         let maxCatch = max(1, catchMap.values.max() ?? 1)
         let maxLoss = max(1, lossMap.values.max() ?? 1)
         let cells = Set(catchMap.keys).union(lossMap.keys)
-        return Map(initialPosition: .region(MKCoordinateRegion(center: card.spot.coordinate.cl, latitudinalMeters: 500, longitudinalMeters: 500)), interactionModes: [.pan, .zoom]) {
-            ForEach(Array(cells), id: \.self) { key in
-                if let center = centerOf(key, catches: catches, sessions: sessions) {
-                    let c = catchMap[key] ?? 0, l = lossMap[key] ?? 0
-                    MapCircle(center: center.cl, radius: 15)
-                        .foregroundStyle(c >= l ? DS.Color.accent.opacity(0.25 + 0.6 * Double(c) / Double(maxCatch)) : DS.Color.textTertiary.opacity(0.25 + 0.6 * Double(l) / Double(maxLoss)))
+        return MapReader { proxy in
+            Map(initialPosition: .region(MKCoordinateRegion(center: card.spot.coordinate.cl, latitudinalMeters: 500, longitudinalMeters: 500)), interactionModes: [.pan, .zoom]) {
+                ForEach(Array(cells), id: \.self) { key in
+                    if let center = centerOf(key, catches: catches, sessions: sessions) {
+                        let c = catchMap[key] ?? 0, l = lossMap[key] ?? 0
+                        MapCircle(center: center.cl, radius: 15)
+                            .foregroundStyle(c >= l ? DS.Color.accent.opacity(0.25 + 0.6 * Double(c) / Double(maxCatch)) : DS.Color.textTertiary.opacity(0.25 + 0.6 * Double(l) / Double(maxLoss)))
+                    }
+                }
+                // 地図のメモ（F-52）：古いほど薄い
+                ForEach(notes) { note in
+                    Annotation("", coordinate: note.coordinate.cl, anchor: .bottom) {
+                        Button { selectedNote = note } label: { NoteMarker(note: note) }.buttonStyle(.plain)
+                    }
                 }
             }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+            .saturation(0)
+            .onTapGesture(coordinateSpace: .local) { point in
+                guard placingNote, let c = proxy.convert(point, from: .local) else { return }
+                placingNote = false
+                noteDraft = NoteDraft(coordinate: Coordinate(latitude: c.latitude, longitude: c.longitude))
+            }
         }
-        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
-        .saturation(0)
+    }
+
+    private func reloadNotes() {
+        notes = ((try? services.store.notes()) ?? []).filter { Geo.distanceMeters($0.coordinate, card.spot.coordinate) <= 1500 }
     }
 
     /// メッシュキー → 中心（釣果か針イベントの座標から）
