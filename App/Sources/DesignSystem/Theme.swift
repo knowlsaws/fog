@@ -166,7 +166,7 @@ enum ThemeAssets {
             case .tabGuide: return "タブ：図鑑（正方形・マゼンタ背景）"
             case .tabSpots: return "タブ：釣り場（正方形・マゼンタ背景）"
             case .ringHome: return "ホームの釣れ率の飾り枠（正方形・マゼンタ背景・中央は空ける）"
-            case .charHome: return "ホーム：釣れ率の円を両手で囲むキャラクター（横 16:9・マゼンタ背景）"
+            case .charHome: return "ホーム：釣れ率の円を両手で囲むキャラクター（横 16:9・円は高さの 44%）"
             case .charLog: return "ログ：右上のキャラクター（縦 3:4・マゼンタ背景）"
             case .charGuide: return "図鑑：右上のキャラクター（縦 3:4・マゼンタ背景）"
             }

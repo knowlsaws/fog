@@ -185,9 +185,9 @@ struct HomeView: View {
             ZStack {
                 // 円は常に画面中央（魚種別の数字があっても動かさない）
                 ZStack {
-                    // テーマのキャラクター（魔導書：円を両手で囲む。横 16:9、円の直径は画像の高さの 50%）
+                    // テーマのキャラクター（円を両手で囲む。横 16:9、円の直径は画像の高さの 44%。画像はこの比率に合わせて作る）
                     GeometryReader { g in
-                        ThemeCharacter(name: .charHome, baseWidth: g.size.height * 2 * 16 / 9)
+                        ThemeCharacter(name: .charHome, baseWidth: g.size.height / 0.44 * 16 / 9)
                             .position(x: g.size.width / 2, y: g.size.height / 2)
                     }
                     // 魔法の光（画像テーマのときだけ）
