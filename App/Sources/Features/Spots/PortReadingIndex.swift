@@ -9,7 +9,7 @@ final class PortReadingIndex {
     static let shared = PortReadingIndex()
 
     struct Entry: Sendable {
-        let port: Port
+        let port: Core.Port
         let name: String
         let reading: String
     }
@@ -28,7 +28,7 @@ final class PortReadingIndex {
     }
 
     /// 名前の部分一致（漢字）か、よみの部分一致（かな・ローマ字）。前方一致を先に、短い名前を先に
-    func search(_ raw: String, limit: Int = 40) -> [Port] {
+    func search(_ raw: String, limit: Int = 40) -> [Core.Port] {
         let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
         let kana = Self.hiragana(q)

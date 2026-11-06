@@ -369,7 +369,7 @@ struct SpotCardView: View {
 struct SpotSearchSheet: View {
     let onPick: (MKMapItem) -> Void
     @State private var text = ""
-    @State private var ports: [Port] = []
+    @State private var ports: [Core.Port] = []
     @State private var completions: [MKLocalSearchCompletion] = []
     @State private var results: [MKMapItem] = []
     @State private var completer = Completer()
@@ -429,7 +429,7 @@ struct SpotSearchSheet: View {
         .padding(DS.Spacing.m).background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip))
     }
 
-    private static func mapItem(for port: Port) -> MKMapItem {
+    private static func mapItem(for port: Core.Port) -> MKMapItem {
         let item = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: port.lat, longitude: port.lon)))
         item.name = port.name
         return item
