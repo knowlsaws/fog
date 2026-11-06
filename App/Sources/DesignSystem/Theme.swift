@@ -277,8 +277,8 @@ enum ThemeAssets {
             return Loaded(image: image, blend: .opaque)
         }
         if corner.r < 0.12 && corner.g < 0.12 && corner.b < 0.12 {
-            // 黒背景：暗いテーマなら screen で黒を透かす。明るいテーマでは screen が効かないので明るさを不透明度にする
-            if ThemeStore.shared.theme.isLight, let keyed = luminanceKeyed(image) { return Loaded(image: keyed, blend: .keyed) }
+            // 黒背景：明るさを不透明度に変換して透過画像にする（screen 合成はボタンの中など別レイヤーでは効かないため使わない）
+            if let keyed = luminanceKeyed(image) { return Loaded(image: keyed, blend: .keyed) }
             return Loaded(image: image, blend: .screen)
         }
         return Loaded(image: image, blend: .opaque)
