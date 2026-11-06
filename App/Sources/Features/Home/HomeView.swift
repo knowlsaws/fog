@@ -185,9 +185,18 @@ struct HomeView: View {
             ZStack {
                 // 円は常に画面中央（魚種別の数字があっても動かさない）
                 ZStack {
+                    // テーマのキャラクター（魔導書：円を両手で囲む。横 16:9、円の直径は画像の高さの 50%）
+                    GeometryReader { g in
+                        ThemeCharacter(name: .charHome, baseWidth: g.size.height * 2 * 16 / 9)
+                            .position(x: g.size.width / 2, y: g.size.height / 2)
+                    }
+                    // 魔法の光（画像テーマのときだけ）
+                    if ThemeStore.shared.theme.hasAssets { MagicGlow().padding(-DS.Spacing.xl) }
+                    // テーマの飾り枠（魔導書など。黒背景の絵を透かして重ねる）
+                    ThemeOrnament(name: .ringHome).padding(-DS.Spacing.l)
                     // 下が開いた 270° のゲージ（確定画像）。トラックは暗いグレー
                     Circle().trim(from: 0, to: 0.75)
-                        .stroke(Color.white.opacity(0.16), style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .stroke(DS.Color.textPrimary.opacity(0.16), style: StrokeStyle(lineWidth: 12, lineCap: .round))
                         .rotationEffect(.degrees(135))
                     Circle().trim(from: 0, to: 0.75 * CGFloat(model.score?.score ?? 0) / 100)
                         .stroke(model.score?.isForecast == true ? DS.Color.accent.opacity(0.6) : DS.Color.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
@@ -280,7 +289,20 @@ struct HomeView: View {
     }
 }
 
-/// 記録中のオレンジの点（脈動）。
+/// 釣れ率の後ろで脈動するエメラルドの光（画像テーマ）。
+struct MagicGlow: View {
+    @State private var on = false
+    var body: some View {
+        Circle()
+            .fill(RadialGradient(colors: [DS.Color.secondary.opacity(0.55), DS.Color.secondary.opacity(0.12), .clear], center: .center, startRadius: 0, endRadius: 120))
+            .scaleEffect(on ? 1.08 : 0.92).opacity(on ? 1 : 0.7)
+            .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: on)
+            .onAppear { on = true }
+            .allowsHitTesting(false)
+    }
+}
+
+/// 記録中のテーマ色の点（脈動）。
 struct PulsingDot: View {
     @State private var on = false
     var body: some View {
@@ -465,7 +487,7 @@ struct ForecastChart: View {
             // 潮止まりの帯（満干の前後 30 分、薄いグレー）。文字なし
             ForEach(model.dayExtremes, id: \.at) { e in
                 RectangleMark(xStart: .value("s", e.at.addingTimeInterval(-30 * 60)), xEnd: .value("e", e.at.addingTimeInterval(30 * 60)), yStart: .value("y0", 0), yEnd: .value("y1", 100))
-                    .foregroundStyle(Color.white.opacity(0.07))
+                    .foregroundStyle(DS.Color.textPrimary.opacity(0.07))
             }
             // 朝マズメ・夕マズメの帯（黄）。文字なし。時刻はグラフをタップした詳細で
             ForEach(twilightBands, id: \.start) { b in
@@ -515,7 +537,7 @@ struct ForecastChart: View {
                     }
             }
             if model.now >= model.dayStart && model.now <= model.dayEnd {
-                RuleMark(x: .value("今", model.now)).foregroundStyle(Color.white.opacity(0.9)).lineStyle(StrokeStyle(lineWidth: 1.5))
+                RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.textPrimary.opacity(0.9)).lineStyle(StrokeStyle(lineWidth: 1.5))
                 if let level = model.nowTideLevelCm {
                     PointMark(x: .value("今", model.now), y: .value("潮位", tideY(level)))
                         .foregroundStyle(DS.Color.sea)
@@ -803,11 +825,11 @@ struct DayDetailSheet: View {
 
     private func time(_ d: Date) -> String { HomeViewModel.clock(d, timeZone: model.timeZone) }
 
-    private func row(_ label: String, _ value: String?, color: Color = DS.Color.textPrimary) -> some View {
+    private func row(_ label: String, _ value: String?, color: Color? = nil) -> some View {
         HStack {
             Text(label).font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
             Spacer()
-            Text(value ?? "—").font(DS.Font.number(15)).foregroundStyle(value == nil ? DS.Color.textTertiary : color)
+            Text(value ?? "—").font(DS.Font.number(15)).foregroundStyle(value == nil ? DS.Color.textTertiary : (color ?? DS.Color.textPrimary))
         }
     }
 }

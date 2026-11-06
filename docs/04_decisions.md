@@ -3,6 +3,20 @@
 新しい決定は上に追加する。形式：日付 / 決定 / 理由 / 影響範囲。
 Claude Code が設計判断で迷ったら、まずここに「提案」として書き、PR で問う。
 
+## 2026-11-06 L27 テーマの切替と魔導書テーマ（F-49）
+
+| 決定 | 理由 | 影響 |
+| --- | --- | --- |
+| `DS.Color` / `DS.Font` を定数から計算プロパティにし、`ThemeStore.shared.theme` のパレットを返す。画面側は書き換えない | 60 以上の画面・シートを個別に直さずに全画面へ反映する | `DS.swift`, `Theme.swift` |
+| 切替は `RootTabView` の `.id(theme)` で全画面を作り直す（設定シートも閉じる） | 子ビューの再評価漏れで古い色が残るのを避ける | `RootTabView` |
+| 画像はアセットカタログでなくフォルダ参照 `App/Resources/Themes/<theme>/` に PNG/JPG を置く。無ければ色だけで描く | 開発者が iPad の GitHub からファイルを置くだけで済む。imageset の Contents.json を書かせない | `project.yml`（`type: folder`）, `ThemeAssets` |
+| タブのアイコンと飾り枠は「純黒の背景」で描いてもらい、`blendMode(.screen)` で黒を透かす | 画像生成 AI は透過 PNG を確実には出せない | `ThemeOrnament` |
+| 地図と撮影画面には画像を敷かない | 地図とカメラが主役。読めなくなる | `RootTabView.screenBackground` |
+| 画像テーマは白基調（開発者の参考画像に合わせて紺から変更）。文字は墨、面は半透明の白、テーマ色は緑のまま。`preferredColorScheme` もテーマに追従させ、Info.plist の `UIUserInterfaceStyle: Dark` は外す | 参考画像が霞んだ白の高精細な画風。システムのシートやコントロールも白に合わせないと浮く | `ThemePalette.grimoire`, `FogApp`, `project.yml` |
+| 地の色に依存していた `Color.white`（ゲージのトラック、グラフの現在線・帯、今日の枠）は `DS.Color.textPrimary` に置き換える。カメラ・地図・衛星写真の上の白はそのまま | 白地では白が消える。地図やカメラの上は常に暗いので白のままでよい | `HomeView`, `SessionDetailView`, `YearCalendarView` |
+| 切り抜き画像はマゼンタ背景を透明に抜く（色立方体フィルタ）。黒背景は暗いテーマでは screen、明るいテーマでは明るさを不透明度にして重ねる | 画像生成 AI は透過 PNG を確実には出せない。白地では screen が効かない | `ThemeAssets.prepare` |
+| キャラクターはホーム（円を両手で囲む）・ログ・図鑑の右上に切り抜きで置き、大きさと位置は設定のスライダーで合わせる | 生成画像の構図は毎回ずれるので、アプリ側で合わせられるようにする | `ThemeCharacter`, `CharacterTuningRow` |
+
 ## 2026-11-06 L26 釣行のワンタップ開始・終了（F-48）
 
 | 決定 | 理由 | 影響 |

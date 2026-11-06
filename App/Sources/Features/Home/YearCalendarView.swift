@@ -109,7 +109,7 @@ struct YearCalendarSheet: View {
             }
             .frame(height: 16)
             .overlay {
-                if cal.isDate(day, inSameDayAs: model.now) { RoundedRectangle(cornerRadius: 3).stroke(Color.white, lineWidth: 1) }
+                if cal.isDate(day, inSameDayAs: model.now) { RoundedRectangle(cornerRadius: 3).stroke(DS.Color.textPrimary, lineWidth: 1) }
             }
         }
         .buttonStyle(.plain)

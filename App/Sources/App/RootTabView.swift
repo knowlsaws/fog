@@ -18,7 +18,7 @@ struct RootTabView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DS.Color.background)
+        .background(screenBackground)
         .environment(\.captureTab, { selected = .capture })
         // タブバーは下のセーフエリアとして置く。各画面はタブバーを除いた高さを 100% として使える
         .safeAreaInset(edge: .bottom, spacing: 0) { tabBar }
@@ -36,6 +36,18 @@ struct RootTabView: View {
         .onAppear {
             if services.router.pending == .capture { selected = .capture; services.router.pending = nil }
         }
+        // テーマ切替（F-49）で全画面を作り直す
+        .id(ThemeStore.shared.theme)
+    }
+
+    /// 画面ごとの背景（テーマ画像があればそれ、無ければ背景色）。地図と撮影は画像を敷かない
+    @ViewBuilder private var screenBackground: some View {
+        switch selected {
+        case .home: ThemeBackground(name: .bgHome)
+        case .log: ThemeBackground(name: .bgLog)
+        case .guide: ThemeBackground(name: .bgGuide)
+        case .capture, .spots: DS.Color.background.ignoresSafeArea()
+        }
     }
 
     private var tabBar: some View {
@@ -49,11 +61,32 @@ struct RootTabView: View {
         .padding(.horizontal, DS.Spacing.l)
         .padding(.top, 6)
         .padding(.bottom, 2)
-        .background(
+        .background(tabBarBackground)
+    }
+
+    /// タブバーの帯。テーマ画像（tabbar）があればそれを横いっぱいに敷く
+    private var tabBarBackground: some View {
+        ZStack {
             DS.Color.surface
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 28, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 28, style: .continuous))
-                .ignoresSafeArea(edges: .bottom)
-        )
+            if let image = ThemeAssets.image(.tabbar) {
+                GeometryReader { geo in
+                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height).clipped()
+                }
+            }
+        }
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 28, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 28, style: .continuous))
+        .ignoresSafeArea(edges: .bottom)
+    }
+
+    private static func ornament(for tab: Tab) -> ThemeAssets.Name {
+        switch tab {
+        case .home: return .tabHome
+        case .log: return .tabLog
+        case .capture: return .tabCamera
+        case .guide: return .tabGuide
+        case .spots: return .tabSpots
+        }
     }
 
     private func tabButton(_ tab: Tab, system: String) -> some View {
@@ -61,10 +94,20 @@ struct RootTabView: View {
             if selected == tab { NotificationCenter.default.post(name: .fogHomeReselected, object: tab == .home ? tab : nil) }
             selected = tab
         } label: {
-            Image(systemName: selected == tab ? system + ".fill" : system)
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(selected == tab ? DS.Color.textPrimary : DS.Color.textTertiary)
-                .frame(maxWidth: .infinity, minHeight: 40)
+            Group {
+                if ThemeAssets.has(Self.ornament(for: tab)) {
+                    // テーマのアイコン（黒背景の絵を透かして重ねる）。選択中は明るく、他は暗く
+                    ThemeOrnament(name: Self.ornament(for: tab))
+                        .frame(width: 36, height: 36)
+                        .opacity(selected == tab ? 1 : 0.45)
+                        .shadow(color: selected == tab ? DS.Color.accent.opacity(0.6) : .clear, radius: 8)
+                } else {
+                    Image(systemName: selected == tab ? system + ".fill" : system)
+                        .font(.system(size: 22, weight: .regular))
+                        .foregroundStyle(selected == tab ? DS.Color.textPrimary : DS.Color.textTertiary)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 40)
         }
         .buttonStyle(.plain)
     }
@@ -72,11 +115,17 @@ struct RootTabView: View {
     private var captureButton: some View {
         Button { selected = .capture } label: {
             ZStack {
-                Circle().fill(DS.Color.accent).frame(width: 56, height: 56)
-                    .shadow(color: DS.Color.accent.opacity(0.55), radius: 12)
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(.white)
+                if ThemeAssets.has(.tabCamera) {
+                    Circle().fill(DS.Color.secondary.opacity(0.35)).frame(width: 56, height: 56)
+                        .shadow(color: DS.Color.secondary.opacity(0.7), radius: 14)
+                    ThemeOrnament(name: .tabCamera).frame(width: 60, height: 60)
+                } else {
+                    Circle().fill(DS.Color.accent).frame(width: 56, height: 56)
+                        .shadow(color: DS.Color.accent.opacity(0.55), radius: 12)
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white)
+                }
             }
             .frame(maxWidth: .infinity)
         }

@@ -1,40 +1,43 @@
 import SwiftUI
 
 /// デザイントークン。docs/02_ui_design.md §1 が正。
+/// 値は選択中のテーマ（`ThemeStore.shared.theme`、F-49）から取る。`ThemeStore` は `@Observable` なので切替で再描画される
 enum DS {
+    @MainActor private static var palette: ThemePalette { ThemeStore.shared.theme.palette }
+
     enum Color {
-        static let background = SwiftUI.Color(red: 0.043, green: 0.043, blue: 0.047)   // #0B0B0C
-        static let surface = SwiftUI.Color(red: 0.11, green: 0.11, blue: 0.12)
-        static let surfaceRaised = SwiftUI.Color(red: 0.16, green: 0.16, blue: 0.17)
-        /// テーマ色：緑（2026-11-04 実機フィードバックでオレンジ #FF7A1A から変更）
-        static let accent = SwiftUI.Color(red: 0.45, green: 0.62, blue: 0.47)           // #739E78
-        static let secondary = SwiftUI.Color(red: 0.45, green: 0.62, blue: 0.47)        // muted green（accent と同じ）
+        @MainActor static var background: SwiftUI.Color { palette.background }
+        @MainActor static var surface: SwiftUI.Color { palette.surface }
+        @MainActor static var surfaceRaised: SwiftUI.Color { palette.surfaceRaised }
+        /// テーマ色：緑（2026-11-04 実機フィードバックでオレンジ #FF7A1A から変更）。魔導書テーマでは金
+        @MainActor static var accent: SwiftUI.Color { palette.accent }
+        @MainActor static var secondary: SwiftUI.Color { palette.secondary }
         /// マズメの帯（黄）
-        static let sun = SwiftUI.Color(red: 0.96, green: 0.77, blue: 0.26)              // #F5C542
+        @MainActor static var sun: SwiftUI.Color { palette.sun }
         /// 日の出・日の入（オレンジ）
-        static let daylight = SwiftUI.Color(red: 1.0, green: 0.478, blue: 0.102)        // #FF7A1A
-        static let textPrimary = SwiftUI.Color.white
-        static let textSecondary = SwiftUI.Color.white.opacity(0.7)
-        static let textTertiary = SwiftUI.Color.white.opacity(0.4)
+        @MainActor static var daylight: SwiftUI.Color { palette.daylight }
+        @MainActor static var textPrimary: SwiftUI.Color { palette.textPrimary }
+        @MainActor static var textSecondary: SwiftUI.Color { palette.textSecondary }
+        @MainActor static var textTertiary: SwiftUI.Color { palette.textTertiary }
         /// 予報が届かない先・低確信度
-        static let faded = SwiftUI.Color.white.opacity(0.25)
-        /// 月相アイコン（確定画像の薄い紫）
+        @MainActor static var faded: SwiftUI.Color { palette.faded }
         /// 潮位の曲線（海の青）
-        static let sea = SwiftUI.Color(red: 0.30, green: 0.62, blue: 0.95)
-        static let moon = SwiftUI.Color(red: 0.56, green: 0.52, blue: 0.85)
+        @MainActor static var sea: SwiftUI.Color { palette.sea }
+        /// 月相アイコン（薄い紫）
+        @MainActor static var moon: SwiftUI.Color { palette.moon }
         /// 週行の土曜（日付と曜日の文字だけ）
-        static let saturday = SwiftUI.Color(red: 0.36, green: 0.64, blue: 1.0)             // #5CA3FF
+        @MainActor static var saturday: SwiftUI.Color { palette.saturday }
         /// 週行の日曜・祝日（日付と曜日の文字だけ）
-        static let holiday = SwiftUI.Color(red: 1.0, green: 0.36, blue: 0.36)              // #FF5C5C
-        /// グラフのパネル・チップの枠なし面（#1C1C1E 相当）
-        static let panel = SwiftUI.Color(red: 0.11, green: 0.11, blue: 0.12)
+        @MainActor static var holiday: SwiftUI.Color { palette.holiday }
+        /// グラフのパネル・チップの枠なし面
+        @MainActor static var panel: SwiftUI.Color { palette.panel }
     }
 
     enum Font {
-        static func score(_ size: CGFloat = 96) -> SwiftUI.Font { .system(size: size, weight: .bold, design: .rounded) }
-        static func number(_ size: CGFloat = 20) -> SwiftUI.Font { .system(size: size, weight: .semibold, design: .rounded) }
-        static let label = SwiftUI.Font.system(size: 13, weight: .medium)
-        static let caption = SwiftUI.Font.system(size: 11, weight: .regular)
+        @MainActor static func score(_ size: CGFloat = 96) -> SwiftUI.Font { .system(size: size, weight: .bold, design: ThemeStore.shared.theme.numberDesign) }
+        @MainActor static func number(_ size: CGFloat = 20) -> SwiftUI.Font { .system(size: size, weight: .semibold, design: ThemeStore.shared.theme.numberDesign) }
+        @MainActor static var label: SwiftUI.Font { .system(size: 13, weight: .medium, design: ThemeStore.shared.theme.fontDesign) }
+        @MainActor static var caption: SwiftUI.Font { .system(size: 11, weight: .regular, design: ThemeStore.shared.theme.fontDesign) }
     }
 
     enum Spacing {

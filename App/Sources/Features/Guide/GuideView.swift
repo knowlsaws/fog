@@ -40,6 +40,13 @@ struct GuideView: View {
             }
         }
         .padding(.horizontal, DS.Spacing.l)
+        // テーマのキャラクター（魔導書：右上、縦 3:4）。内容の後ろに置く
+        .background(alignment: .topTrailing) {
+            GeometryReader { g in
+                ThemeCharacter(name: .charGuide, baseWidth: g.size.width * 0.5)
+                    .frame(width: g.size.width, height: g.size.height, alignment: .topTrailing)
+            }
+        }
         .onAppear(perform: reload)
         .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in reload() }
         .sheet(item: $selected) { SpeciesDetailView(entry: $0).onDisappear(perform: reload) }

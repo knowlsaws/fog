@@ -19,7 +19,7 @@ struct FogApp: App {
     var body: some Scene {
         WindowGroup {
             RootTabView()
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(ThemeStore.shared.theme.colorScheme)
                 .environment(services)
                 .environment(services.store)
                 .task { await services.start() }

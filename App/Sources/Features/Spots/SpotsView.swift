@@ -67,7 +67,7 @@ struct SpotsView: View {
             particles = ParticleSystem(count: MapLayerSettings.density.count)
             if !MapLayerSettings.isEnabled(layer), let first = MapLayerSettings.enabled.first { layer = first }
             rebuildRaster()
-        }) { NavigationStack { MapLayerSettingsView() }.preferredColorScheme(.dark).tint(DS.Color.accent) }
+        }) { NavigationStack { MapLayerSettingsView() }.preferredColorScheme(ThemeStore.shared.theme.colorScheme).tint(DS.Color.accent) }
         .onChange(of: hourOffset) { _, _ in rebuildRaster(throttle: true) }
         .onChange(of: services.gridForecast.version) { _, _ in rebuildRaster() }
         .onAppear {
