@@ -48,6 +48,15 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
             | tee build.log | xcbeautify || (echo "::group::errors"; grep -E "error:|❌" build.log | grep -v "warning:" | sort -u | head -80; echo "::endgroup::"; tail -60 build.log; exit 1)
 
+      - name: List theme resources in the built app
+        run: |
+          APP=$(find ~/Library/Developer/Xcode/DerivedData -type d -name "Fog.app" -path "*iphonesimulator*" | head -1)
+          echo "app: $APP"
+          ls -la "$APP" | head -60
+          echo "--- Themes"
+          find "$APP" -maxdepth 3 -path "*Themes*" | head -40
+          find "$APP" -name "bg_home*" -o -name "char_home*" | head
+
       - name: Core tests on macOS
         working-directory: Packages/Core
         run: swift test

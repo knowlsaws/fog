@@ -707,6 +707,8 @@ struct ThemeSettingsView: View {
                         }
                         Text("App/Resources/Themes/\(theme.rawValue)/ に PNG か JPG で置くと次のビルドから使われます")
                             .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                        Text(ThemeAssets.diagnostics(for: theme))
+                            .font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary).settingsRow()
                     } header: { SectionLabel(text: "画像（\(ThemeAssets.Name.allCases.filter { ThemeAssets.has($0, theme: theme) }.count)/\(ThemeAssets.Name.allCases.count)）") }
                     let characters = ThemeAssets.Name.allCases.filter { $0.isCharacter && ThemeAssets.has($0, theme: theme) }
                     if !characters.isEmpty {
