@@ -78,6 +78,8 @@ final class SessionDetectionService {
     // MARK: 位置の処理
 
     func handle(_ fix: LocationFix) async {
+        // 起動直後に届く古い位置（前回の記憶）は捨てる。これを候補の開始時刻にすると、次の位置で滞在時間が一気に満たされて即開始してしまう
+        guard Date.now.timeIntervalSince(fix.at) < 120 else { return }
         let context = await context(for: fix)
         let events = detector.handle(fix, context: context)
         for event in events {
@@ -258,22 +260,25 @@ final class SessionDetectionService {
 
     // MARK: 除外した場所（誤検出の学習）
 
-    static let excludedKey = "fog.detection.excludedMeshes"
+    static let excludedKey = "fog.detection.excludedPoints"
+    static let exclusionRadiusM: Double = 400
 
-    /// 500 m メッシュのキー（ShoreOracle と同じ刻み）
-    static func exclusionKey(_ c: Coordinate) -> String { String(format: "%.3f,%.3f", (c.latitude * 200).rounded() / 200, (c.longitude * 200).rounded() / 200) }
-    static var excludedMeshes: [String] {
-        get { UserDefaults.standard.stringArray(forKey: excludedKey) ?? [] }
-        set { UserDefaults.standard.set(newValue, forKey: excludedKey) }
+    /// 除外した地点（緯度・経度の組）。この地点から 400 m 以内では自動で始めない
+    static var excludedPoints: [Coordinate] {
+        get { (UserDefaults.standard.array(forKey: excludedKey) as? [[Double]])?.compactMap { $0.count == 2 ? Coordinate(latitude: $0[0], longitude: $0[1]) : nil } ?? [] }
+        set { UserDefaults.standard.set(newValue.map { [$0.latitude, $0.longitude] }, forKey: excludedKey) }
     }
-    static func isExcluded(_ c: Coordinate) -> Bool { excludedMeshes.contains(exclusionKey(c)) }
-    /// 自動検出の釣行を破棄・削除したら、その場所（開始地点と立ち位置のメッシュ）を除外に加える
+    static var excludedMeshes: [Coordinate] { excludedPoints }
+    static func isExcluded(_ c: Coordinate) -> Bool { excludedPoints.contains { Geo.distanceMeters($0, c) <= exclusionRadiusM } }
+    /// 自動検出の釣行を破棄・削除したら、その場所（釣り場の中心と立ち位置）を除外に加える（近い点はまとめる）
     static func exclude(session: Core.Session, spot: Spot?) {
-        var keys = Set(excludedMeshes)
-        for c in session.track.map(\.coordinate) + [spot?.coordinate].compactMap({ $0 }) where c.isPlausible { keys.insert(exclusionKey(c)) }
-        excludedMeshes = Array(keys)
+        var points = excludedPoints
+        for c in [spot?.coordinate].compactMap({ $0 }) + session.track.map(\.coordinate) where c.isPlausible {
+            if !points.contains(where: { Geo.distanceMeters($0, c) <= 150 }) { points.append(c) }
+        }
+        excludedPoints = points
     }
-    static func clearExclusions() { excludedMeshes = [] }
+    static func clearExclusions() { excludedPoints = [] }
 
     /// 「誤検出なので破棄」：釣行を削除し、その場所では自動で始めないようにする（削除は分析に即時反映）。
     func discard(sessionID: UUID) {

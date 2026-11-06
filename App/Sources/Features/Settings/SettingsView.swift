@@ -580,7 +580,7 @@ struct DetectionSettingsView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("除外した場所").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
-                        Text("破棄・削除した釣行の場所（500 m 四方）では自動で始めない：\(excludedCount) 件").font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
+                        Text("破棄・削除した釣行の場所から 400 m 以内では自動で始めない：\(excludedCount) 件").font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
                     }
                     Spacer()
                     if excludedCount > 0 {
