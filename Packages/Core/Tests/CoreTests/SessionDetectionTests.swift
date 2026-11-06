@@ -103,4 +103,45 @@ final class SessionDetectionTests: XCTestCase {
         XCTAssertLessThan(DetectionSettings.forSensitivity(.high).dwellToStart, DetectionSettings.forSensitivity(.medium).dwellToStart)
         XCTAssertLessThan(DetectionSettings.forSensitivity(.medium).dwellToStart, DetectionSettings.forSensitivity(.low).dwellToStart)
     }
+
+    /// F-48: 手動開始は滞在を待たずに釣行中になり、離れると自動で終わる
+    func testManualStartEndsAutomaticallyWhenLeaving() {
+        var detector = SessionDetector(settings: .default)
+        let t0 = Date(timeIntervalSince1970: 1_792_267_200)
+        detector.beginManually(at: t0, anchor: port)
+        XCTAssertTrue(detector.isActive)
+        // その場に 10 分：終了しない
+        var events: [SessionDetector.Event] = []
+        for i in 1...10 {
+            events += detector.handle(LocationFix(at: t0.addingTimeInterval(Double(i) * 60), coordinate: port, horizontalAccuracyM: 15, speedMS: 0), context: context(for: LocationFix(at: t0, coordinate: port, horizontalAccuracyM: 15, speedMS: 0)))
+        }
+        XCTAssertFalse(events.contains { if case .end = $0 { return true }; return false })
+        // 2 km 離れて 1 時間：終了する
+        let far = Coordinate(latitude: port.latitude + 0.02, longitude: port.longitude)
+        for i in 11...80 {
+            events += detector.handle(LocationFix(at: t0.addingTimeInterval(Double(i) * 60), coordinate: far, horizontalAccuracyM: 15, speedMS: 0), context: .init(registeredSpotID: nil, nearShore: false))
+        }
+        XCTAssertEqual(events.filter { if case .end = $0 { return true }; return false }.count, 1)
+    }
+
+    /// F-48: 手動終了のあと同じ場所に居続けても自動では再開しない。離れてから戻れば通常通り始まる
+    func testManualEndDoesNotRestartWhileStaying() {
+        var detector = SessionDetector(settings: .default)
+        let t0 = Date(timeIntervalSince1970: 1_792_267_200)
+        detector.beginManually(at: t0, anchor: port)
+        detector.endManually(anchor: port)
+        XCTAssertFalse(detector.isActive)
+        var events: [SessionDetector.Event] = []
+        for i in 1...120 {
+            events += detector.handle(LocationFix(at: t0.addingTimeInterval(Double(i) * 60), coordinate: port, horizontalAccuracyM: 15, speedMS: 0), context: .init(registeredSpotID: UUID(), nearShore: true))
+        }
+        XCTAssertTrue(events.isEmpty, "居続けても開始しない")
+        // 2 km 離れてから戻り、滞在すると始まる
+        let far = Coordinate(latitude: port.latitude + 0.02, longitude: port.longitude)
+        _ = detector.handle(LocationFix(at: t0.addingTimeInterval(121 * 60), coordinate: far, horizontalAccuracyM: 15, speedMS: 0), context: .init(registeredSpotID: nil, nearShore: false))
+        for i in 122...200 {
+            events += detector.handle(LocationFix(at: t0.addingTimeInterval(Double(i) * 60), coordinate: port, horizontalAccuracyM: 15, speedMS: 0), context: .init(registeredSpotID: UUID(), nearShore: true))
+        }
+        XCTAssertEqual(events.filter { if case .start = $0 { return true }; return false }.count, 1)
+    }
 }

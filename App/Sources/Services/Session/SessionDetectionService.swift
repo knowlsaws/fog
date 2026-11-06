@@ -83,8 +83,10 @@ final class SessionDetectionService {
         for event in events {
             switch event {
             case .start(let at, let anchor, let spotID):
+                guard activeSessionID == nil else { continue }
                 await startSession(at: at, anchor: anchor, spotID: spotID)
             case .resume(_, let at, let anchor):
+                guard activeSessionID == nil else { continue }
                 await resumeSession(at: at, anchor: anchor)
             case .end(let at):
                 await endSession(at: at)
@@ -110,7 +112,7 @@ final class SessionDetectionService {
 
     // MARK: 開始・再開・終了
 
-    private func startSession(at: Date, anchor: Coordinate, spotID: UUID?) async {
+    private func startSession(at: Date, anchor: Coordinate, spotID: UUID?, manual: Bool = false) async {
         var spot: Spot
         if let spotID, let existing = try? store.spot(id: spotID) {
             spot = existing
@@ -122,7 +124,7 @@ final class SessionDetectionService {
         // 前回のタックル・リグを引き継ぐ（F-14）
         let previous = (try? store.sessions())?.first
         let session = Core.Session(spotID: spot.id, startedAt: at, tackle: previous?.tackle, rigID: previous?.rigID,
-                                   track: [TrackSample(at: at, coordinate: anchor)], tackleID: previous?.tackleID, isAutoDetected: true)
+                                   track: [TrackSample(at: at, coordinate: anchor)], tackleID: previous?.tackleID, isAutoDetected: !manual)
         do {
             try store.upsert(session)
         } catch {
@@ -201,12 +203,55 @@ final class SessionDetectionService {
         }
     }
 
+    // MARK: ワンタップの開始・終了（F-48）
+
+    /// 手動開始に使う位置：現在地 → ホームで選んでいる釣り場 → 直近の釣行の釣り場。どれも無ければ nil
+    func manualStartCoordinate() -> (coordinate: Coordinate, spotID: UUID?)? {
+        let spots = ((try? store.spots()) ?? []).filter { $0.coordinate.isPlausible }
+        if let fix = location.lastFix, fix.coordinate.isPlausible, Date.now.timeIntervalSince(fix.at) < 30 * 60 {
+            let near = spots.filter(\.isRegistered)
+                .min { Geo.distanceMeters($0.coordinate, fix.coordinate) < Geo.distanceMeters($1.coordinate, fix.coordinate) }
+            if let near, Geo.distanceMeters(near.coordinate, fix.coordinate) <= Self.registeredSpotRadiusM {
+                return (fix.coordinate, near.id)
+            }
+            return (fix.coordinate, nil)
+        }
+        if let id = UserDefaults.standard.string(forKey: "fog.homeSpotID").flatMap(UUID.init(uuidString:)),
+           let home = spots.first(where: { $0.id == id }) {
+            return (home.coordinate, home.id)
+        }
+        if let last = (try? store.sessions())?.first, let spot = spots.first(where: { $0.id == last.spotID }) {
+            return (spot.coordinate, spot.id)
+        }
+        return nil
+    }
+
+    /// ワンタップで今すぐ釣行を始める。滞在判定は待たない。以後の終了判定・立ち位置の記録・環境スナップショットは自動検出と同じ。
+    /// 位置が決められないときは false
+    @discardableResult
+    func startManually() async -> Bool {
+        guard activeSessionID == nil else { return true }
+        location.requestAuthorization()
+        guard let target = manualStartCoordinate() else { return false }
+        let now = Date.now
+        detector.beginManually(at: now, anchor: target.coordinate)
+        await startSession(at: now, anchor: target.coordinate, spotID: target.spotID, manual: true)
+        location.probe()
+        return activeSessionID != nil
+    }
+
+    /// ワンタップで今すぐ終える。その場に居続けても自動では再開しない（離れるまで開始判定を止める）
+    func endManually() async {
+        let anchor = scheduler.currentCoordinate ?? location.lastFix?.coordinate
+        await endSession(at: .now)
+        detector.endManually(anchor: anchor)
+    }
+
     // MARK: 通知からの操作
 
-    /// 「停止」：今すぐ終了する。
+    /// 「停止」：今すぐ終了する（ワンタップの終了と同じ）。
     func stopNow() async {
-        await endSession(at: .now)
-        detector.reset()
+        await endManually()
     }
 
     /// 「誤検出なので破棄」：釣行を削除する（削除は分析に即時反映）。

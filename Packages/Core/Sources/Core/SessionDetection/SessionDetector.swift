@@ -33,6 +33,8 @@ public struct SessionDetector: Sendable {
         case active(ActiveState)
         /// 終了直後。ランガンの再開待ち
         case cooldown(endedAt: Date, anchor: Coordinate)
+        /// 手動で終了した直後。その場に居続けても自動では始めない（`awayDistanceM` 以上離れたら通常に戻る）
+        case suppressed(anchor: Coordinate)
     }
 
     public struct ActiveState: Equatable, Sendable {
@@ -134,7 +136,28 @@ public struct SessionDetector: Sendable {
                 pendingResume = nil
             }
             return []
+
+        case .suppressed(let anchor):
+            guard Geo.distanceMeters(anchor, fix.coordinate) > settings.awayDistanceM || moving else { return [] }
+            state = .idle
+            return process(fix, context: context)
         }
+    }
+
+    /// ワンタップの開始（F-48）。滞在判定を待たずに今すぐ釣行中にする。以後の終了判定・立ち位置の記録は自動と同じ
+    public mutating func beginManually(at: Date, anchor: Coordinate) {
+        var active = ActiveState(startedAt: at, anchor: anchor)
+        active.lastTrackAt = at
+        active.lastTrack = anchor
+        state = .active(active)
+        pendingResume = nil
+    }
+
+    /// ワンタップの終了（F-48）。その場に居続けても自動で再開しないよう、離れるまで開始判定を止める。
+    /// `anchor` が nil（位置不明）なら通常の待機に戻る
+    public mutating func endManually(anchor: Coordinate?) {
+        pendingResume = nil
+        state = anchor.map { .suppressed(anchor: $0) } ?? .idle
     }
 
     /// `process` の結果の `.start` をランガンなら `.resume` に置き換える。呼び出し側はこちらを使う。
