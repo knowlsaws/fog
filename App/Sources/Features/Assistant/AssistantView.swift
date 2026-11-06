@@ -103,8 +103,12 @@ struct AssistantView: View {
         let assistant = services.assistant
         switch mode {
         case .ask:
-            let context = AssistantContext.build(services: services, home: home)
-            Task { await assistant.ask(t, context: context) }
+            working = true
+            Task {
+                let context = await AssistantContext.build(services: services, home: home, question: t)
+                working = false
+                await assistant.ask(t, context: context)
+            }
         case .shop:
             working = true
             assistant.append(user: t)
