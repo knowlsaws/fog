@@ -31,6 +31,13 @@ final class SpotsViewModel {
     private let cache = AnalysisCache()
     private var candidateIDs: [String: UUID] = [:]
     private let portCatalog = PortCatalog.bundled()
+
+    /// 近く（300 m）の登録釣り場か港の名前。メモの場所欄の初期値に使う（F-52）
+    func placeName(near c: Coordinate) -> String? {
+        if let spot = allCards.map(\.spot).filter({ $0.coordinate.isPlausible }).min(by: { Geo.distanceMeters($0.coordinate, c) < Geo.distanceMeters($1.coordinate, c) }),
+           Geo.distanceMeters(spot.coordinate, c) <= 300 { return spot.name }
+        return portCatalog.nearest(to: c, within: 300)?.name
+    }
     private var lastSearchedRegion: MKCoordinateRegion?
     private var searchTask: Task<Void, Never>?
 

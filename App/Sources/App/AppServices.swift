@@ -17,6 +17,7 @@ final class AppServices {
     let photoImport: PhotoImportService
     let report: ReportService
     let feeds = FeedService()
+    let assistant = AssistantService()
     let inventory = InventoryStore()
     let gridForecast = GridForecastService()
     let router = Router()

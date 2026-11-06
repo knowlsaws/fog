@@ -253,9 +253,32 @@ final class FogStore {
         try commit()
     }
 
+    // MARK: メモ（F-52）
+
+    func notes() throws -> [Core.Note] {
+        try context.fetch(FetchDescriptor<NoteRecord>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])).map(\.core)
+    }
+
+    func upsert(_ note: Core.Note) throws {
+        let noteID = note.id
+        if let existing = try fetchOne(NoteRecord.self, #Predicate { $0.uuid == noteID }) {
+            existing.apply(note)
+        } else {
+            context.insert(NoteRecord(core: note))
+        }
+        try commit()
+    }
+
+    func deleteNote(id: UUID) throws {
+        guard let record = try fetchOne(NoteRecord.self, #Predicate { $0.uuid == id }) else { return }
+        context.delete(record)
+        try commit()
+    }
+
     // MARK: 全削除
 
     func deleteAll() throws {
+        try context.delete(model: NoteRecord.self)
         try context.delete(model: SpotRecord.self)
         try context.delete(model: SessionRecord.self)
         try context.delete(model: CatchRecord.self)

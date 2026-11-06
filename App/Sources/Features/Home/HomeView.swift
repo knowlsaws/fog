@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showMoon = false
     @State private var showFeed = false
+    @State private var showAssistant = false
     @State private var chipDetail: HomeViewModel.Chip?
     @State private var showStartFailed = false
     @State private var toggling = false
@@ -53,6 +54,7 @@ struct HomeView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showMoon) { MoonSheet(model: model).presentationDetents([.medium]) }
         .sheet(isPresented: $showFeed) { FeedView(keywords: model.feedKeywords()).presentationDetents([.large]) }
+        .sheet(isPresented: $showAssistant) { AssistantView(home: model).presentationDetents([.large]) }
         .alert("位置が分かりません", isPresented: $showStartFailed) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -166,6 +168,11 @@ struct HomeView: View {
             }
             Spacer()
             sessionButton.frame(height: 32)
+            // 相談（F-53）：アプリの記録について聞く・店先の話を声で記録
+            Button { showAssistant = true } label: {
+                Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 18)).foregroundStyle(DS.Color.textSecondary).frame(height: 32)
+            }
+            .buttonStyle(.plain)
             Button { showMoon = true } label: {
                 Image(systemName: MoonSymbol.name(age: model.moonAge)).font(.system(size: 20)).foregroundStyle(DS.Color.moon).frame(height: 32)
             }

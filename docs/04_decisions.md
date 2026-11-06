@@ -3,6 +3,17 @@
 新しい決定は上に追加する。形式：日付 / 決定 / 理由 / 影響範囲。
 Claude Code が設計判断で迷ったら、まずここに「提案」として書き、PR で問う。
 
+## 2026-11-06 L31 釣り場詳細の詳細情報・地図のメモ・相談（F-51〜F-53）
+
+| 決定 | 理由 | 影響 |
+| --- | --- | --- |
+| 釣り場詳細の下半分にホームの `ForecastChart` をそのまま埋め込む。`HomeViewModel` に `fixedSpotID` / `isEmbedded` を足し、釣り場を固定してウィジェット・通知の書き出しを止める | 同じ計算と見た目を二重に作らない | `HomeViewModel`, `SpotDetailView` |
+| メモは SwiftData の `NoteRecord` に保存（iCloud 同期の対象）。場所・本文・出どころ（手入力／音声）・日時 | 「完全ローカル＋本人の iCloud」の原則どおり | `Note`, `NoteRecord`, `FogStore` |
+| 地図のメモは「置くモード」にしてからタップで置く（常時タップでは地図の操作と衝突する） | 誤って置かない | `SpotsView` |
+| 「Siri に聞く」は端末内の言語モデル（Foundation Models）で実装し、アプリの記録の要約（3,000 文字程度）を毎回プロンプトに渡す。Siri 本体との連携（App Intents）は引き続き保留 | 記録を外に出さず、通信なしで答えられる。Siri アプリ側からの質問は仕組みが別 | `AssistantService`, `AssistantContext` |
+| 声は `SFSpeechRecognizer`（端末内認識を優先）で書き起こし、録音は保存しない。店先の話は `@Generable` の型（場所・要点・魚種）に整理させ、場所名は登録釣り場 → 港データ（よみ）→ 現在地の順に座標へ直す | 会話のまま残すより、場所ごとの要点のほうが地図で役に立つ | `SpeechRecorder`, `NoteResolver` |
+| Apple Intelligence が使えない端末・設定では理由を表示し、メモ化は書き起こしをそのまま 1 件にする | 動かない状態にしない | `AssistantService.unavailableReason` |
+
 ## 2026-11-06 L30 漁港の即時検索（F-50）
 
 | 決定 | 理由 | 影響 |
