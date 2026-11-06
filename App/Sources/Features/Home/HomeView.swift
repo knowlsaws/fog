@@ -185,10 +185,14 @@ struct HomeView: View {
             ZStack {
                 // 円は常に画面中央（魚種別の数字があっても動かさない）
                 ZStack {
-                    // テーマのキャラクター（魔導書：円を両手で囲む。横 16:9、円の直径は画像の高さの 50%）
+                    // テーマのキャラクター（円を両手で囲む）。画像の中の円（char_home.json の cx/cy/d）が釣れ率の円にぴったり重なるように拡大と位置を決める
                     GeometryReader { g in
-                        ThemeCharacter(name: .charHome, baseWidth: g.size.height * 2 * 16 / 9)
-                            .position(x: g.size.width / 2, y: g.size.height / 2)
+                        let spec = ThemeAssets.circle(.charHome)
+                        let size = ThemeAssets.image(.charHome)?.size ?? CGSize(width: 16, height: 9)
+                        let imageH = g.size.height / spec.d
+                        let imageW = imageH * size.width / size.height
+                        ThemeCharacter(name: .charHome, baseWidth: imageW)
+                            .position(x: g.size.width / 2 + (0.5 - spec.cx) * imageW, y: g.size.height / 2 + (0.5 - spec.cy) * imageH)
                     }
                     // 魔法の光（画像テーマのときだけ）
                     if ThemeStore.shared.theme.hasAssets { MagicGlow().padding(-DS.Spacing.xl) }

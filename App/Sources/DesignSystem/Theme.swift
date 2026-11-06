@@ -166,7 +166,7 @@ enum ThemeAssets {
             case .tabGuide: return "タブ：図鑑（正方形・マゼンタ背景）"
             case .tabSpots: return "タブ：釣り場（正方形・マゼンタ背景）"
             case .ringHome: return "ホームの釣れ率の飾り枠（正方形・マゼンタ背景・中央は空ける）"
-            case .charHome: return "ホーム：釣れ率の円を両手で囲むキャラクター（横 16:9・マゼンタ背景）"
+            case .charHome: return "ホーム：釣れ率の円を両手で囲むキャラクター（横 16:9・円は高さの 44%）"
             case .charLog: return "ログ：右上のキャラクター（縦 3:4・マゼンタ背景）"
             case .charGuide: return "図鑑：右上のキャラクター（縦 3:4・マゼンタ背景）"
             }
@@ -182,7 +182,7 @@ enum ThemeAssets {
 
     private static var cache: [String: Loaded?] = [:]
 
-    static func clear() { cache.removeAll() }
+    static func clear() { cache.removeAll(); circleCache.removeAll() }
 
     static func image(_ name: Name) -> UIImage? { load(name)?.image }
     static func has(_ name: Name) -> Bool { load(name) != nil }
@@ -210,7 +210,9 @@ enum ThemeAssets {
     /// 四隅の色で背景を判定する。マゼンタ（#FF00FF 付近）なら透過に抜き、黒なら screen で重ね、それ以外はそのまま
     private static func prepare(_ image: UIImage) -> Loaded {
         guard let corner = cornerColor(image) else { return Loaded(image: image, blend: .opaque) }
-        if corner.r > 0.75 && corner.g < 0.35 && corner.b > 0.75 {
+        // すでに透過 PNG（四隅が透明）ならそのまま重ねる
+        if corner.a < 0.1 { return Loaded(image: image, blend: .keyed) }
+        if corner.r > 0.6 && corner.g < 0.45 && corner.b > 0.45 && corner.r - corner.g > 0.3 {
             if let keyed = chromaKeyed(image) { return Loaded(image: keyed, blend: .keyed) }
             return Loaded(image: image, blend: .opaque)
         }
@@ -253,23 +255,27 @@ enum ThemeAssets {
         return UIImage(cgImage: out, scale: image.scale, orientation: image.imageOrientation)
     }
 
-    /// 四隅 4 点の平均色（0〜1）
-    private static func cornerColor(_ image: UIImage) -> (r: Double, g: Double, b: Double)? {
+    /// 縁に沿った 8 点（角から 4% 内側）の平均色と不透明度（0〜1）。生成画像の角の滲みに引きずられないようにする
+    private static func cornerColor(_ image: UIImage) -> (r: Double, g: Double, b: Double, a: Double)? {
         guard let cg = image.cgImage else { return nil }
         let w = cg.width, h = cg.height
-        guard w > 8, h > 8 else { return nil }
-        var sum = (r: 0.0, g: 0.0, b: 0.0)
+        guard w > 16, h > 16 else { return nil }
+        let ix = max(2, w / 25), iy = max(2, h / 25)
+        var sum = (r: 0.0, g: 0.0, b: 0.0, a: 0.0)
         var count = 0.0
-        for (x, y) in [(2, 2), (w - 3, 2), (2, h - 3), (w - 3, h - 3)] {
+        for (x, y) in [(ix, iy), (w - 1 - ix, iy), (ix, h - 1 - iy), (w - 1 - ix, h - 1 - iy), (w / 2, iy), (w / 2, h - 1 - iy), (ix, h / 2), (w - 1 - ix, h / 2)] {
             var px = [UInt8](repeating: 0, count: 4)
             guard let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
                                       space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
             ctx.draw(cg, in: CGRect(x: -x, y: -(h - 1 - y), width: w, height: h))
-            sum.r += Double(px[0]) / 255; sum.g += Double(px[1]) / 255; sum.b += Double(px[2]) / 255
+            let a = Double(px[3]) / 255
+            // 乗算済みなので色は不透明度で割って戻す
+            let d = max(a, 0.001)
+            sum.r += Double(px[0]) / 255 / d; sum.g += Double(px[1]) / 255 / d; sum.b += Double(px[2]) / 255 / d; sum.a += a
             count += 1
         }
         guard count > 0 else { return nil }
-        return (sum.r / count, sum.g / count, sum.b / count)
+        return (sum.r / count, sum.g / count, sum.b / count, sum.a / count)
     }
 
     /// マゼンタ系（色相 285〜335°、彩度 0.45 以上、明度 0.35 以上）を透明にする色立方体フィルタ
@@ -306,6 +312,30 @@ enum ThemeAssets {
             if h < 0 { h += 360 }
         }
         return (h, mx == 0 ? 0 : d / mx, mx)
+    }
+
+    // MARK: ホームの円の位置（画像ごとの JSON）
+
+    /// 画像の中で「釣れ率の円」が占める位置と大きさ（画像の幅・高さに対する割合）。`<name>.json` に `{"cx":0.5,"cy":0.6,"d":0.4}` で置く
+    struct CircleSpec: Decodable {
+        var cx: Double = 0.5
+        var cy: Double = 0.5
+        var d: Double = 0.44
+    }
+
+    private static var circleCache: [String: CircleSpec] = [:]
+
+    static func circle(_ name: Name) -> CircleSpec {
+        let theme = ThemeStore.shared.theme
+        let key = "\(theme.rawValue)/\(name.rawValue)"
+        if let c = circleCache[key] { return c }
+        var spec = CircleSpec()
+        if let url = Bundle.main.url(forResource: name.rawValue, withExtension: "json", subdirectory: "Themes/\(theme.rawValue)"),
+           let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(CircleSpec.self, from: data) {
+            spec = decoded
+        }
+        circleCache[key] = spec
+        return spec
     }
 
     // MARK: キャラクターの位置の微調整（設定 > テーマ）
