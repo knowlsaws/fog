@@ -27,6 +27,8 @@ struct LogView: View {
             }
             .padding(.horizontal, DS.Spacing.l)
             .padding(.bottom, DS.Spacing.s)
+            // テーマのキャラクター（魔導書：右上、縦 3:4）。内容の後ろに置く
+            .background(alignment: .topTrailing) { ThemeCharacter(name: .charLog, baseWidth: geo.size.width * 0.5) }
         }
         .onAppear { model.attach(services) }
         .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in model.refresh() }

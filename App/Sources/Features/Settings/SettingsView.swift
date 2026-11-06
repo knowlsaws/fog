@@ -708,10 +708,55 @@ struct ThemeSettingsView: View {
                         Text("App/Resources/Themes/\(theme.rawValue)/ に PNG か JPG で置くと次のビルドから使われます")
                             .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
                     } header: { SectionLabel(text: "画像（\(ThemeAssets.Name.allCases.filter { ThemeAssets.has($0, theme: theme) }.count)/\(ThemeAssets.Name.allCases.count)）") }
+                    let characters = ThemeAssets.Name.allCases.filter { $0.isCharacter && ThemeAssets.has($0, theme: theme) }
+                    if !characters.isEmpty {
+                        Section {
+                            ForEach(characters, id: \.rawValue) { name in
+                                CharacterTuningRow(name: name).settingsRow()
+                            }
+                        } header: { SectionLabel(text: "キャラクターの位置（画面を見ながら調整。閉じると反映）") }
+                    }
                 }
             }
             .listStyle(.plain)
         }
         .onChange(of: theme) { _, t in ThemeStore.shared.theme = t }
+    }
+}
+
+/// キャラクターの倍率と位置ずらし
+private struct CharacterTuningRow: View {
+    let name: ThemeAssets.Name
+    @State private var scale: Double = 1
+    @State private var dx: Double = 0
+    @State private var dy: Double = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            HStack {
+                Text(name.rawValue).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                Spacer()
+                Button("戻す") { scale = 1; dx = 0; dy = 0; save() }.font(DS.Font.caption).foregroundStyle(DS.Color.accent)
+            }
+            slider("大きさ", $scale, 0.4...2.5)
+            slider("横", $dx, -200...200)
+            slider("縦", $dy, -200...200)
+        }
+        .onAppear { scale = ThemeAssets.scale(name); dx = ThemeAssets.offset(name).width; dy = ThemeAssets.offset(name).height }
+    }
+
+    private func slider(_ label: String, _ value: Binding<Double>, _ range: ClosedRange<Double>) -> some View {
+        HStack(spacing: DS.Spacing.s) {
+            Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).frame(width: 36, alignment: .leading)
+            Slider(value: value, in: range).tint(DS.Color.accent).onChange(of: value.wrappedValue) { _, _ in save() }
+            Text(label == "大きさ" ? String(format: "%.2f", value.wrappedValue) : "\(Int(value.wrappedValue))")
+                .font(DS.Font.number(11)).foregroundStyle(DS.Color.textSecondary).frame(width: 36, alignment: .trailing)
+        }
+    }
+
+    private func save() {
+        ThemeAssets.setScale(name, scale)
+        ThemeAssets.setOffset(name, CGSize(width: dx, height: dy))
+        ThemeLayoutTuning.shared.revision += 1
     }
 }

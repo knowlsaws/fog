@@ -185,6 +185,13 @@ struct HomeView: View {
             ZStack {
                 // 円は常に画面中央（魚種別の数字があっても動かさない）
                 ZStack {
+                    // テーマのキャラクター（魔導書：円を両手で囲む。横 16:9、円の直径は画像の高さの 50%）
+                    GeometryReader { g in
+                        ThemeCharacter(name: .charHome, baseWidth: g.size.height * 2 * 16 / 9)
+                            .position(x: g.size.width / 2, y: g.size.height / 2)
+                    }
+                    // 魔法の光（画像テーマのときだけ）
+                    if ThemeStore.shared.theme.hasAssets { MagicGlow().padding(-DS.Spacing.xl) }
                     // テーマの飾り枠（魔導書など。黒背景の絵を透かして重ねる）
                     ThemeOrnament(name: .ringHome).padding(-DS.Spacing.l)
                     // 下が開いた 270° のゲージ（確定画像）。トラックは暗いグレー
@@ -282,7 +289,20 @@ struct HomeView: View {
     }
 }
 
-/// 記録中のオレンジの点（脈動）。
+/// 釣れ率の後ろで脈動するエメラルドの光（画像テーマ）。
+struct MagicGlow: View {
+    @State private var on = false
+    var body: some View {
+        Circle()
+            .fill(RadialGradient(colors: [DS.Color.secondary.opacity(0.55), DS.Color.secondary.opacity(0.12), .clear], center: .center, startRadius: 0, endRadius: 120))
+            .scaleEffect(on ? 1.08 : 0.92).opacity(on ? 1 : 0.7)
+            .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: on)
+            .onAppear { on = true }
+            .allowsHitTesting(false)
+    }
+}
+
+/// 記録中のテーマ色の点（脈動）。
 struct PulsingDot: View {
     @State private var on = false
     var body: some View {
