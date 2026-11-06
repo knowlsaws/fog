@@ -719,7 +719,7 @@ struct ThemeSettingsView: View {
                             }
                             .settingsRow()
                         }
-                        Text("App/Resources/Themes/\(theme.rawValue)/ に PNG か JPG で置くと次のビルドから使われます")
+                        Text("App/Resources/Themes/\(theme.assetFolder)/ に PNG か JPG で置くと次のビルドから使われます")
                             .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
                         Text(ThemeAssets.diagnostics(for: theme))
                             .font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary).settingsRow()

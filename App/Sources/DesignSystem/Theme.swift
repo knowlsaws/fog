@@ -8,19 +8,32 @@ import CoreImage.CIFilterBuiltins
 enum AppTheme: String, CaseIterable, Identifiable {
     case dark
     case grimoire
+    case grimoireDark
     case tensura
 
     var id: String { rawValue }
     var label: String {
         switch self {
         case .dark: return "ダーク"
-        case .grimoire: return "フリーレン"
+        case .grimoire: return "フリーレン 白"
+        case .grimoireDark: return "フリーレン 黒"
         case .tensura: return "転スラ"
         }
     }
 
     /// 画像テーマか（画像フォルダを持つ）
     var hasAssets: Bool { self != .dark }
+
+    /// 画像フォルダ名（`Themes/<folder>/`）。無いファイルは `fallbackFolder` から探す
+    var assetFolder: String {
+        switch self {
+        case .dark: return ""
+        case .grimoire: return "grimoire"
+        case .grimoireDark: return "grimoire_dark"
+        case .tensura: return "tensura"
+        }
+    }
+    var fallbackFolder: String? { self == .grimoireDark ? "grimoire" : nil }
 
     /// 明るい地のテーマか。システムの配色（シート・コントロール）もこれに合わせる
     var isLight: Bool { self == .grimoire }
@@ -30,6 +43,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .dark: return .dark
         case .grimoire: return .grimoire
+        case .grimoireDark: return .grimoireDark
         case .tensura: return .tensura
         }
     }
@@ -38,14 +52,14 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var fontDesign: Font.Design {
         switch self {
         case .dark, .tensura: return .default
-        case .grimoire: return .serif
+        case .grimoire, .grimoireDark: return .serif
         }
     }
 
     var numberDesign: Font.Design {
         switch self {
         case .dark, .tensura: return .rounded
-        case .grimoire: return .serif
+        case .grimoire, .grimoireDark: return .serif
         }
     }
 }
@@ -109,6 +123,27 @@ struct ThemePalette {
         holiday: Color(red: 0.88, green: 0.28, blue: 0.28),
         panel: Color.white.opacity(0.72),
         scrim: Color.white.opacity(0.30)
+    )
+
+    /// フリーレン 黒：漆黒に緑のテーマ色、クリームの文字、セリフ体。画像は夜の情景（無いものは白版から借りる）
+    static let grimoireDark = ThemePalette(
+        background: Color(red: 0.043, green: 0.043, blue: 0.047),   // #0B0B0C
+        surface: Color(red: 0.09, green: 0.09, blue: 0.11).opacity(0.88),
+        surfaceRaised: Color(red: 0.17, green: 0.17, blue: 0.19),
+        accent: Color(red: 0.45, green: 0.62, blue: 0.47),          // #739E78
+        secondary: Color(red: 0.45, green: 0.62, blue: 0.47),
+        sun: Color(red: 0.96, green: 0.77, blue: 0.26),
+        daylight: Color(red: 1.0, green: 0.478, blue: 0.102),
+        textPrimary: Color(red: 0.95, green: 0.91, blue: 0.80),     // クリーム #F3E9CC
+        textSecondary: Color(red: 0.95, green: 0.91, blue: 0.80).opacity(0.72),
+        textTertiary: Color(red: 0.95, green: 0.91, blue: 0.80).opacity(0.45),
+        faded: Color(red: 0.95, green: 0.91, blue: 0.80).opacity(0.25),
+        sea: Color(red: 0.30, green: 0.62, blue: 0.95),
+        moon: Color(red: 0.62, green: 0.56, blue: 0.90),
+        saturday: Color(red: 0.36, green: 0.64, blue: 1.0),
+        holiday: Color(red: 1.0, green: 0.36, blue: 0.36),
+        panel: Color(red: 0.09, green: 0.09, blue: 0.11).opacity(0.82),
+        scrim: Color.black.opacity(0.30)
     )
 
     /// 転スラ：漆黒にリムルの水色。面は半透明の黒で背景画像（各キャラの色の亀裂）を透かす
@@ -224,12 +259,13 @@ enum ThemeAssets {
         let key = "\(theme.rawValue)/\(name.rawValue)"
         if let cached = cache[key] { return cached }
         var found: Loaded?
-        if let dir = directory(for: theme) {
+        let dirs = [directory(for: theme), theme.fallbackFolder.flatMap { directory(named: $0) }].compactMap { $0 }
+        search: for dir in dirs {
             for ext in ["png", "jpg", "jpeg", "PNG", "JPG"] {
                 let url = dir.appendingPathComponent("\(name.rawValue).\(ext)")
                 if FileManager.default.fileExists(atPath: url.path), let image = UIImage(contentsOfFile: url.path) {
                     found = prepare(image)
-                    break
+                    break search
                 }
             }
         }
@@ -239,11 +275,13 @@ enum ThemeAssets {
 
     /// テーマの画像フォルダ。フォルダ参照の置かれ方の違いに備えて、バンドル直下の `Themes/<theme>`、`<theme>`、
     /// そしてバンドル内を 2 階層まで探して `<theme>` という名前のフォルダを使う
-    static func directory(for theme: AppTheme) -> URL? {
-        guard let root = Bundle.main.resourceURL else { return nil }
+    static func directory(for theme: AppTheme) -> URL? { directory(named: theme.assetFolder) }
+
+    static func directory(named folder: String) -> URL? {
+        guard !folder.isEmpty, let root = Bundle.main.resourceURL else { return nil }
         let fm = FileManager.default
-        var candidates = [root.appendingPathComponent("Themes/\(theme.rawValue)"), root.appendingPathComponent(theme.rawValue)]
-        if let sub = Bundle.main.url(forResource: theme.rawValue, withExtension: nil, subdirectory: "Themes") { candidates.append(sub) }
+        var candidates = [root.appendingPathComponent("Themes/\(folder)"), root.appendingPathComponent(folder)]
+        if let sub = Bundle.main.url(forResource: folder, withExtension: nil, subdirectory: "Themes") { candidates.append(sub) }
         for c in candidates {
             var isDir: ObjCBool = false
             if fm.fileExists(atPath: c.path, isDirectory: &isDir), isDir.boolValue { return c }
@@ -252,7 +290,7 @@ enum ThemeAssets {
         if let e = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
             for case let url as URL in e {
                 if e.level > 2 { e.skipDescendants(); continue }
-                if url.lastPathComponent == theme.rawValue, (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true { return url }
+                if url.lastPathComponent == folder, (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true { return url }
             }
         }
         return nil
@@ -392,9 +430,9 @@ enum ThemeAssets {
         let key = "\(theme.rawValue)/\(name.rawValue)"
         if let c = circleCache[key] { return c }
         var spec = CircleSpec()
-        if let url = directory(for: theme)?.appendingPathComponent("\(name.rawValue).json"),
-           let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(CircleSpec.self, from: data) {
-            spec = decoded
+        for dir in [directory(for: theme), theme.fallbackFolder.flatMap { directory(named: $0) }].compactMap({ $0 }) {
+            let url = dir.appendingPathComponent("\(name.rawValue).json")
+            if let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(CircleSpec.self, from: data) { spec = decoded; break }
         }
         circleCache[key] = spec
         return spec
