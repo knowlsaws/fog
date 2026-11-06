@@ -38,7 +38,7 @@ struct YearCalendarSheet: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
         .onAppear { start() }
         .onChange(of: species) { _, _ in start() }
         .onDisappear { task?.cancel() }

@@ -225,7 +225,7 @@ private struct TackleEditSheet: View {
                 TextField("ライン", text: $tackle.line).settingsRow()
             }
             .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
+            .background(ThemeBackground(name: .bgSheet))
             .navigationTitle("タックル")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -264,7 +264,7 @@ private struct RigEditSheet: View {
                 TextField("ワーム", text: $rig.worm).settingsRow()
             }
             .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
+            .background(ThemeBackground(name: .bgSheet))
             .navigationTitle("リグ")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { grams = rig.sinkerGrams == rig.sinkerGrams.rounded() ? String(Int(rig.sinkerGrams)) : String(rig.sinkerGrams) }
@@ -310,7 +310,7 @@ private struct InventoryEditSheet: View {
                 .settingsRow()
             }
             .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
+            .background(ThemeBackground(name: .bgSheet))
             .navigationTitle("在庫")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { countText = String(item.count); thresholdText = String(item.lowThreshold) }
@@ -577,10 +577,24 @@ struct DetectionSettingsView: View {
                 detailRow("開始", "同じ場所に \(Int(s.dwellToStart / 60)) 分とどまる")
                 detailRow("終了", "\(Int(s.awayDistanceM)) m 離れて \(Int(s.awayToEnd / 60)) 分、または車で \(Int(s.drivingToEnd / 60)) 分")
                 detailRow("ランガン", "\(Int(s.runAndGunMaxGap / 60)) 分・\(Int(s.runAndGunMaxDistanceM / 1000)) km 以内は同じ釣行")
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("除外した場所").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                        Text("破棄・削除した釣行の場所（500 m 四方）では自動で始めない：\(excludedCount) 件").font(DS.Font.caption).foregroundStyle(DS.Color.textSecondary)
+                    }
+                    Spacer()
+                    if excludedCount > 0 {
+                        Button("消去") { SessionDetectionService.clearExclusions(); excludedCount = 0 }.font(DS.Font.caption).foregroundStyle(DS.Color.accent)
+                    }
+                }
+                .settingsRow()
             }
             .listStyle(.plain)
         }
+        .onAppear { excludedCount = SessionDetectionService.excludedMeshes.count }
     }
+
+    @State private var excludedCount = 0
 
     private func detailRow(_ title: String, _ text: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
