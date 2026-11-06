@@ -196,7 +196,7 @@ struct HomeView: View {
                     ThemeOrnament(name: .ringHome).padding(-DS.Spacing.l)
                     // 下が開いた 270° のゲージ（確定画像）。トラックは暗いグレー
                     Circle().trim(from: 0, to: 0.75)
-                        .stroke(Color.white.opacity(0.16), style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .stroke(DS.Color.textPrimary.opacity(0.16), style: StrokeStyle(lineWidth: 12, lineCap: .round))
                         .rotationEffect(.degrees(135))
                     Circle().trim(from: 0, to: 0.75 * CGFloat(model.score?.score ?? 0) / 100)
                         .stroke(model.score?.isForecast == true ? DS.Color.accent.opacity(0.6) : DS.Color.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
@@ -487,7 +487,7 @@ struct ForecastChart: View {
             // 潮止まりの帯（満干の前後 30 分、薄いグレー）。文字なし
             ForEach(model.dayExtremes, id: \.at) { e in
                 RectangleMark(xStart: .value("s", e.at.addingTimeInterval(-30 * 60)), xEnd: .value("e", e.at.addingTimeInterval(30 * 60)), yStart: .value("y0", 0), yEnd: .value("y1", 100))
-                    .foregroundStyle(Color.white.opacity(0.07))
+                    .foregroundStyle(DS.Color.textPrimary.opacity(0.07))
             }
             // 朝マズメ・夕マズメの帯（黄）。文字なし。時刻はグラフをタップした詳細で
             ForEach(twilightBands, id: \.start) { b in
@@ -537,7 +537,7 @@ struct ForecastChart: View {
                     }
             }
             if model.now >= model.dayStart && model.now <= model.dayEnd {
-                RuleMark(x: .value("今", model.now)).foregroundStyle(Color.white.opacity(0.9)).lineStyle(StrokeStyle(lineWidth: 1.5))
+                RuleMark(x: .value("今", model.now)).foregroundStyle(DS.Color.textPrimary.opacity(0.9)).lineStyle(StrokeStyle(lineWidth: 1.5))
                 if let level = model.nowTideLevelCm {
                     PointMark(x: .value("今", model.now), y: .value("潮位", tideY(level)))
                         .foregroundStyle(DS.Color.sea)
@@ -825,11 +825,11 @@ struct DayDetailSheet: View {
 
     private func time(_ d: Date) -> String { HomeViewModel.clock(d, timeZone: model.timeZone) }
 
-    private func row(_ label: String, _ value: String?, color: Color = DS.Color.textPrimary) -> some View {
+    private func row(_ label: String, _ value: String?, color: Color? = nil) -> some View {
         HStack {
             Text(label).font(DS.Font.label).foregroundStyle(DS.Color.textTertiary)
             Spacer()
-            Text(value ?? "—").font(DS.Font.number(15)).foregroundStyle(value == nil ? DS.Color.textTertiary : color)
+            Text(value ?? "—").font(DS.Font.number(15)).foregroundStyle(value == nil ? DS.Color.textTertiary : (color ?? DS.Color.textPrimary))
         }
     }
 }

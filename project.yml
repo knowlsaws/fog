@@ -47,7 +47,6 @@ targets:
       properties:
         CFBundleDisplayName: Fog
         UILaunchScreen: {}
-        UIUserInterfaceStyle: Dark
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIRequiresFullScreen: true
         NSLocationAlwaysAndWhenInUseUsageDescription: 釣り場に着いたら自動で釣行を記録するために、常に位置情報を使います。

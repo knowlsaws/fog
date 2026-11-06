@@ -13,12 +13,16 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .dark: return "ダーク"
-        case .grimoire: return "魔導書"
+        case .grimoire: return "フリーレン"
         }
     }
 
     /// 画像テーマか（画像フォルダを持つ）
     var hasAssets: Bool { self != .dark }
+
+    /// 明るい地のテーマか。システムの配色（シート・コントロール）もこれに合わせる
+    var isLight: Bool { self == .grimoire }
+    var colorScheme: ColorScheme { isLight ? .light : .dark }
 
     var palette: ThemePalette {
         switch self {
@@ -60,8 +64,8 @@ struct ThemePalette {
     var saturday: Color
     var holiday: Color
     var panel: Color
-    /// 画像の上に敷く暗幕の濃さ（0 で無し）。文字の読みやすさのため
-    var scrim: Double
+    /// 背景画像の上に敷く幕（文字の読みやすさのため）。`.clear` で無し
+    var scrim: Color
 
     static let dark = ThemePalette(
         background: Color(red: 0.043, green: 0.043, blue: 0.047),   // #0B0B0C
@@ -80,28 +84,28 @@ struct ThemePalette {
         saturday: Color(red: 0.36, green: 0.64, blue: 1.0),         // #5CA3FF
         holiday: Color(red: 1.0, green: 0.36, blue: 0.36),          // #FF5C5C
         panel: Color(red: 0.11, green: 0.11, blue: 0.12),
-        scrim: 0
+        scrim: .clear
     )
 
-    /// 魔導書：深い紺の夜空に金とエメラルド。面は半透明のガラスで背景画像を透かす
+    /// フリーレン：白を基調にした淡い画風（霞んだ白・薄い藤色のグレー）。テーマ色は緑のまま。面は半透明の白で背景画像を透かす
     static let grimoire = ThemePalette(
-        background: Color(red: 0.055, green: 0.082, blue: 0.15),    // #0E1526
-        surface: Color(red: 0.10, green: 0.13, blue: 0.22).opacity(0.88),
-        surfaceRaised: Color(red: 0.17, green: 0.20, blue: 0.32),
-        accent: Color(red: 0.84, green: 0.70, blue: 0.40),          // 金 #D6B366
-        secondary: Color(red: 0.31, green: 0.75, blue: 0.60),       // エメラルド #4FBF9A
-        sun: Color(red: 0.98, green: 0.80, blue: 0.36),
-        daylight: Color(red: 1.0, green: 0.55, blue: 0.20),
-        textPrimary: Color(red: 0.95, green: 0.91, blue: 0.80),     // クリーム #F3E9CC
-        textSecondary: Color(red: 0.95, green: 0.91, blue: 0.80).opacity(0.72),
-        textTertiary: Color(red: 0.95, green: 0.91, blue: 0.80).opacity(0.45),
-        faded: Color(red: 0.95, green: 0.91, blue: 0.80).opacity(0.25),
-        sea: Color(red: 0.44, green: 0.71, blue: 1.0),
-        moon: Color(red: 0.71, green: 0.61, blue: 1.0),
-        saturday: Color(red: 0.44, green: 0.71, blue: 1.0),
-        holiday: Color(red: 1.0, green: 0.45, blue: 0.45),
-        panel: Color(red: 0.10, green: 0.13, blue: 0.22).opacity(0.80),
-        scrim: 0.30
+        background: Color(red: 0.96, green: 0.96, blue: 0.97),      // #F5F5F7
+        surface: Color.white.opacity(0.78),
+        surfaceRaised: Color(red: 0.88, green: 0.88, blue: 0.91),
+        accent: Color(red: 0.45, green: 0.62, blue: 0.47),          // #739E78（ダークと同じ緑）
+        secondary: Color(red: 0.38, green: 0.56, blue: 0.42),       // 少し深い緑 #618F6B
+        sun: Color(red: 0.85, green: 0.64, blue: 0.0),              // #D9A400（白地で読める黄）
+        daylight: Color(red: 0.91, green: 0.42, blue: 0.06),        // #E86A10
+        textPrimary: Color(red: 0.17, green: 0.17, blue: 0.20),     // 墨 #2B2B33
+        textSecondary: Color(red: 0.17, green: 0.17, blue: 0.20).opacity(0.66),
+        textTertiary: Color(red: 0.17, green: 0.17, blue: 0.20).opacity(0.42),
+        faded: Color(red: 0.17, green: 0.17, blue: 0.20).opacity(0.18),
+        sea: Color(red: 0.23, green: 0.50, blue: 0.84),             // #3A7FD6
+        moon: Color(red: 0.48, green: 0.40, blue: 0.79),            // #7A66C9
+        saturday: Color(red: 0.18, green: 0.50, blue: 0.88),
+        holiday: Color(red: 0.88, green: 0.28, blue: 0.28),
+        panel: Color.white.opacity(0.72),
+        scrim: Color.white.opacity(0.30)
     )
 }
 
@@ -156,12 +160,12 @@ enum ThemeAssets {
             case .bgSpots: return "釣り場の一覧シートの背景（縦 9:16）"
             case .bgSheet: return "設定・各シートの背景（縦 9:16）"
             case .tabbar: return "タブバーの帯（横 3:1）"
-            case .tabHome: return "タブ：ホーム（正方形・黒背景）"
-            case .tabLog: return "タブ：ログ（正方形・黒背景）"
-            case .tabCamera: return "タブ：撮影（正方形・黒背景）"
-            case .tabGuide: return "タブ：図鑑（正方形・黒背景）"
-            case .tabSpots: return "タブ：釣り場（正方形・黒背景）"
-            case .ringHome: return "ホームの釣れ率の飾り枠（正方形・黒背景）"
+            case .tabHome: return "タブ：ホーム（正方形・マゼンタ背景）"
+            case .tabLog: return "タブ：ログ（正方形・マゼンタ背景）"
+            case .tabCamera: return "タブ：撮影（正方形・マゼンタ背景）"
+            case .tabGuide: return "タブ：図鑑（正方形・マゼンタ背景）"
+            case .tabSpots: return "タブ：釣り場（正方形・マゼンタ背景）"
+            case .ringHome: return "ホームの釣れ率の飾り枠（正方形・マゼンタ背景・中央は空ける）"
             case .charHome: return "ホーム：釣れ率の円を両手で囲むキャラクター（横 16:9・マゼンタ背景）"
             case .charLog: return "ログ：右上のキャラクター（縦 3:4・マゼンタ背景）"
             case .charGuide: return "図鑑：右上のキャラクター（縦 3:4・マゼンタ背景）"
@@ -210,8 +214,43 @@ enum ThemeAssets {
             if let keyed = chromaKeyed(image) { return Loaded(image: keyed, blend: .keyed) }
             return Loaded(image: image, blend: .opaque)
         }
-        if corner.r < 0.12 && corner.g < 0.12 && corner.b < 0.12 { return Loaded(image: image, blend: .screen) }
+        if corner.r < 0.12 && corner.g < 0.12 && corner.b < 0.12 {
+            // 黒背景：暗いテーマなら screen で黒を透かす。明るいテーマでは screen が効かないので明るさを不透明度にする
+            if ThemeStore.shared.theme.isLight, let keyed = luminanceKeyed(image) { return Loaded(image: keyed, blend: .keyed) }
+            return Loaded(image: image, blend: .screen)
+        }
         return Loaded(image: image, blend: .opaque)
+    }
+
+    /// 明るさ（最大チャンネル）をそのまま不透明度にする。黒は透明、鮮やかな色と白は不透明
+    private static func luminanceKeyed(_ image: UIImage) -> UIImage? {
+        guard let cg = image.cgImage else { return nil }
+        let size = 32
+        var cube = [Float](repeating: 0, count: size * size * size * 4)
+        var i = 0
+        for b in 0..<size {
+            for g in 0..<size {
+                for r in 0..<size {
+                    let rf = Float(r) / Float(size - 1), gf = Float(g) / Float(size - 1), bf = Float(b) / Float(size - 1)
+                    let alpha = max(rf, gf, bf)
+                    // 乗算済みアルファ：色はそのまま（最大チャンネル＝alpha なので色 ≤ alpha を満たす）
+                    cube[i] = rf; cube[i + 1] = gf; cube[i + 2] = bf; cube[i + 3] = alpha
+                    i += 4
+                }
+            }
+        }
+        return applyCube(cube, size: size, to: cg, like: image)
+    }
+
+    private static func applyCube(_ cube: [Float], size: Int, to cg: CGImage, like image: UIImage) -> UIImage? {
+        let filter = CIFilter.colorCube()
+        filter.cubeDimension = Float(size)
+        filter.cubeData = cube.withUnsafeBufferPointer { Data(buffer: $0) }
+        filter.inputImage = CIImage(cgImage: cg)
+        guard let output = filter.outputImage else { return nil }
+        let context = CIContext(options: nil)
+        guard let out = context.createCGImage(output, from: output.extent) else { return nil }
+        return UIImage(cgImage: out, scale: image.scale, orientation: image.imageOrientation)
     }
 
     /// 四隅 4 点の平均色（0〜1）
@@ -253,14 +292,7 @@ enum ThemeAssets {
                 }
             }
         }
-        let filter = CIFilter.colorCube()
-        filter.cubeDimension = Float(size)
-        filter.cubeData = cube.withUnsafeBufferPointer { Data(buffer: $0) }
-        filter.inputImage = CIImage(cgImage: cg)
-        guard let output = filter.outputImage else { return nil }
-        let context = CIContext(options: nil)
-        guard let out = context.createCGImage(output, from: output.extent) else { return nil }
-        return UIImage(cgImage: out, scale: image.scale, orientation: image.imageOrientation)
+        return applyCube(cube, size: size, to: cg, like: image)
     }
 
     private static func hsv(_ r: Float, _ g: Float, _ b: Float) -> (Float, Float, Float) {
@@ -296,7 +328,6 @@ enum ThemeAssets {
 /// 画面の背景：テーマ画像があれば全面に敷き（はみ出しは切る）、暗幕を重ねる。無ければテーマの背景色
 struct ThemeBackground: View {
     let name: ThemeAssets.Name
-    var scrim: Double? = nil
 
     var body: some View {
         let theme = ThemeStore.shared.theme
@@ -307,7 +338,7 @@ struct ThemeBackground: View {
                     Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
                         .frame(width: geo.size.width, height: geo.size.height).clipped()
                 }
-                Color.black.opacity(scrim ?? theme.palette.scrim)
+                theme.palette.scrim
             }
         }
         .ignoresSafeArea()

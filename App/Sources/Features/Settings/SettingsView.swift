@@ -35,7 +35,7 @@ struct SettingsView: View {
             .onAppear(perform: reload)
             .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in reload() }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(ThemeStore.shared.theme.colorScheme)
         .tint(DS.Color.accent)
     }
 
@@ -240,7 +240,7 @@ private struct TackleEditSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(ThemeStore.shared.theme.colorScheme)
     }
 }
 
@@ -280,7 +280,7 @@ private struct RigEditSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(ThemeStore.shared.theme.colorScheme)
     }
 }
 
@@ -328,7 +328,7 @@ private struct InventoryEditSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(ThemeStore.shared.theme.colorScheme)
     }
 }
 

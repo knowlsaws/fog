@@ -54,13 +54,13 @@ struct SessionDetailView: View {
             } else {
                 Chart {
                     RectangleMark(xStart: .value("s", session.startedAt), xEnd: .value("e", session.endedAt ?? Date()), yStart: .value("y0", 0), yEnd: .value("y1", 100))
-                        .foregroundStyle(Color.white.opacity(0.05))
+                        .foregroundStyle(DS.Color.textPrimary.opacity(0.05))
                     ForEach(reviewPoints, id: \.at) { p in
                         LineMark(x: .value("時刻", p.at), y: .value("釣れ率", p.score)).foregroundStyle(DS.Color.accent).interpolationMethod(.monotone)
                     }
                     if let r = review {
                         ForEach(Array(r.catchScores.enumerated()), id: \.offset) { _, c in
-                            PointMark(x: .value("釣果", c.0), y: .value("釣れ率", c.1)).foregroundStyle(Color.white).symbolSize(40)
+                            PointMark(x: .value("釣果", c.0), y: .value("釣れ率", c.1)).foregroundStyle(DS.Color.textPrimary).symbolSize(40)
                         }
                     }
                 }
