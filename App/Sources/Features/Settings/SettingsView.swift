@@ -19,11 +19,12 @@ struct SettingsView: View {
                 row("自動検出", system: "location", trailing: SessionDetectionService.sensitivity.label) { DetectionSettingsView() }
                 row("地図レイヤー", system: "square.3.layers.3d", trailing: "\(MapLayerSettings.enabled.count)/\(MapLayer.allCases.count)") { MapLayerSettingsView() }
                 row("情報源", system: "info.circle", trailing: "") { SourcesSettingsView() }
+                row("テーマ", system: "paintpalette", trailing: ThemeStore.shared.theme.label) { ThemeSettingsView() }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .scrollDisabled(true)
-            .background(DS.Color.background)
+            .background(ThemeBackground(name: .bgSheet))
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -89,7 +90,7 @@ private struct SettingsPage<Content: View>: View {
     var body: some View {
         content
             .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
+            .background(ThemeBackground(name: .bgSheet))
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
     }
@@ -97,7 +98,7 @@ private struct SettingsPage<Content: View>: View {
 
 private extension View {
     func settingsRow() -> some View {
-        listRowBackground(DS.Color.background).listRowSeparatorTint(DS.Color.surfaceRaised)
+        listRowBackground(ThemeStore.shared.theme.hasAssets ? DS.Color.panel : DS.Color.background).listRowSeparatorTint(DS.Color.surfaceRaised)
     }
 }
 
@@ -670,5 +671,47 @@ struct SourcesSettingsView: View {
             Button("保存") { if let u = editingFeed { services.feeds.setFilter(url: u, filter: editingFilter) }; editingFeed = nil }
             Button("キャンセル", role: .cancel) { editingFeed = nil }
         } message: { Text("RSS の無いサイトで、URL にこの文字を含むリンクだけを記事にします") }
+    }
+}
+
+// MARK: - テーマ（F-49）
+
+struct ThemeSettingsView: View {
+    @State private var theme: AppTheme = ThemeStore.shared.theme
+
+    var body: some View {
+        SettingsPage(title: "テーマ") {
+            List {
+                Section {
+                    Picker("テーマ", selection: $theme) {
+                        ForEach(AppTheme.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .settingsRow()
+                    Text("切り替えると全画面に反映されます。魔導書は画像が無くても色と書体だけで動きます")
+                        .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                } header: { SectionLabel(text: "見た目") }
+                if theme.hasAssets {
+                    Section {
+                        ForEach(ThemeAssets.Name.allCases, id: \.rawValue) { name in
+                            HStack(spacing: DS.Spacing.s) {
+                                Image(systemName: ThemeAssets.has(name, theme: theme) ? "checkmark.circle.fill" : "circle.dashed")
+                                    .foregroundStyle(ThemeAssets.has(name, theme: theme) ? DS.Color.secondary : DS.Color.textTertiary)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(name.rawValue).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                                    Text(name.note).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                                }
+                                Spacer()
+                            }
+                            .settingsRow()
+                        }
+                        Text("App/Resources/Themes/\(theme.rawValue)/ に PNG か JPG で置くと次のビルドから使われます")
+                            .font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).settingsRow()
+                    } header: { SectionLabel(text: "画像（\(ThemeAssets.Name.allCases.filter { ThemeAssets.has($0, theme: theme) }.count)/\(ThemeAssets.Name.allCases.count)）") }
+                }
+            }
+            .listStyle(.plain)
+        }
+        .onChange(of: theme) { _, t in ThemeStore.shared.theme = t }
     }
 }

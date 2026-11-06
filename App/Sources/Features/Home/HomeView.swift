@@ -185,6 +185,8 @@ struct HomeView: View {
             ZStack {
                 // 円は常に画面中央（魚種別の数字があっても動かさない）
                 ZStack {
+                    // テーマの飾り枠（魔導書など。黒背景の絵を透かして重ねる）
+                    ThemeOrnament(name: .ringHome).padding(-DS.Spacing.l)
                     // 下が開いた 270° のゲージ（確定画像）。トラックは暗いグレー
                     Circle().trim(from: 0, to: 0.75)
                         .stroke(Color.white.opacity(0.16), style: StrokeStyle(lineWidth: 12, lineCap: .round))

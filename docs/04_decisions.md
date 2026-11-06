@@ -3,6 +3,17 @@
 新しい決定は上に追加する。形式：日付 / 決定 / 理由 / 影響範囲。
 Claude Code が設計判断で迷ったら、まずここに「提案」として書き、PR で問う。
 
+## 2026-11-06 L27 テーマの切替と魔導書テーマ（F-49）
+
+| 決定 | 理由 | 影響 |
+| --- | --- | --- |
+| `DS.Color` / `DS.Font` を定数から計算プロパティにし、`ThemeStore.shared.theme` のパレットを返す。画面側は書き換えない | 60 以上の画面・シートを個別に直さずに全画面へ反映する | `DS.swift`, `Theme.swift` |
+| 切替は `RootTabView` の `.id(theme)` で全画面を作り直す（設定シートも閉じる） | 子ビューの再評価漏れで古い色が残るのを避ける | `RootTabView` |
+| 画像はアセットカタログでなくフォルダ参照 `App/Resources/Themes/<theme>/` に PNG/JPG を置く。無ければ色だけで描く | 開発者が iPad の GitHub からファイルを置くだけで済む。imageset の Contents.json を書かせない | `project.yml`（`type: folder`）, `ThemeAssets` |
+| タブのアイコンと飾り枠は「純黒の背景」で描いてもらい、`blendMode(.screen)` で黒を透かす | 画像生成 AI は透過 PNG を確実には出せない | `ThemeOrnament` |
+| 地図と撮影画面には画像を敷かない | 地図とカメラが主役。読めなくなる | `RootTabView.screenBackground` |
+| 魔導書の面は半透明の紺（背景画像を透かす）、文字はクリーム。羊皮紙（明るい面に黒い文字）は採らない | 文字色を面ごとに反転させる改修が全画面に及ぶ。まず色と画像で雰囲気を出し、要望があれば次のループで | `ThemePalette.grimoire` |
+
 ## 2026-11-06 L26 釣行のワンタップ開始・終了（F-48）
 
 | 決定 | 理由 | 影響 |

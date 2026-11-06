@@ -31,6 +31,10 @@ targets:
       - path: App/Sources
       - path: App/Shared
       - path: App/Resources
+      # テーマ画像（F-49）。フォルダ参照としてそのままバンドルに入る（Themes/<theme>/<name>.png）
+      - path: App/Resources/Themes
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: Core
       - target: FogWidgets
