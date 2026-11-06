@@ -120,11 +120,50 @@ final class AssistantService {
         #endif
     }
 
+    /// 入力が「質問」か「記録したい情報（店で聞いた話など）」かを判定する。言語モデルが使えなければ言葉で判定
+    enum Intent { case question, record }
+
+    func classify(_ text: String) async -> Intent {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        #if canImport(FoundationModels)
+        if unavailableReason == nil {
+            let instructions = """
+            入力を 2 種類に分けます。question：釣りアプリの記録や予報について知りたい質問（例「明日の鹿部はどう？」「先月の釣果は？」）。
+            record：釣具店や漁港で聞いた話・自分の覚え書きなど、アプリに残したい情報（例「鹿部で先週ホッケが好調らしい」「店の人がサビキは朝がいいと言ってた」）。
+            迷ったら、文末が疑問なら question、事実や伝聞なら record にします。
+            """
+            do {
+                let session = LanguageModelSession(instructions: instructions)
+                let response = try await session.respond(to: "入力:\n\(t)", generating: IntentGuess.self)
+                return response.content.kind.lowercased().hasPrefix("r") ? .record : .question
+            } catch {
+                Self.log.notice("classify failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        #endif
+        return Self.heuristicIntent(t)
+    }
+
+    nonisolated static func heuristicIntent(_ t: String) -> Intent {
+        let questionMarks = ["？", "?", "どう", "教えて", "かな", "ですか", "何が", "いつ", "どこ", "いくつ", "何尾", "釣れる"]
+        let recordMarks = ["らしい", "と言って", "って言って", "聞いた", "好調", "釣れてる", "釣れている", "そうだ", "とのこと", "だって", "メモ", "覚え"]
+        if questionMarks.contains(where: { t.hasSuffix($0) || t.contains($0 + "？") || t.contains($0 + "?") }) { return .question }
+        if recordMarks.contains(where: { t.contains($0) }) { return .record }
+        return t.hasSuffix("？") || t.hasSuffix("?") ? .question : (t.count > 25 ? .record : .question)
+    }
+
     func append(assistant text: String) { messages.append(Message(role: .assistant, text: text)) }
     func append(user text: String) { messages.append(Message(role: .user, text: text)) }
 }
 
 #if canImport(FoundationModels)
+/// 入力の種類（言語モデルに判定させる型）
+@Generable
+struct IntentGuess {
+    @Guide(description: "question か record のどちらか")
+    var kind: String
+}
+
 /// 店先の話の整理結果（言語モデルに作らせる型）
 @Generable
 struct ShopTalk {
