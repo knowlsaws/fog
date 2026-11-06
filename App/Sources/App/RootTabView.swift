@@ -122,9 +122,10 @@ struct RootTabView: View {
         Button { selected = .capture } label: {
             ZStack {
                 if ThemeAssets.has(.tabCamera) {
-                    Circle().fill(DS.Color.accent).frame(width: 58, height: 58)
-                        .shadow(color: DS.Color.accent.opacity(0.55), radius: 12)
-                    ThemeOrnament(name: .tabCamera).frame(width: 44, height: 44)
+                    // 明るいテーマはテーマ色の丸、暗いテーマは黒い丸にテーマ色の光（スライムが発光して見える）
+                    Circle().fill(ThemeStore.shared.theme.isLight ? DS.Color.accent : DS.Color.surfaceRaised).frame(width: 58, height: 58)
+                        .shadow(color: DS.Color.accent.opacity(ThemeStore.shared.theme.isLight ? 0.55 : 0.8), radius: 14)
+                    ThemeOrnament(name: .tabCamera).frame(width: 46, height: 46)
                         .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
                 } else {
                     Circle().fill(DS.Color.accent).frame(width: 56, height: 56)
