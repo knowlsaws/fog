@@ -48,7 +48,7 @@ struct FeedView: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 
     private func row(_ item: FeedItem) -> some View {

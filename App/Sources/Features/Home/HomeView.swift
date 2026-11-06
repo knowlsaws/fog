@@ -350,7 +350,7 @@ struct MoonSheet: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 
     private func row(_ label: String, _ value: String) -> some View {
@@ -824,7 +824,7 @@ struct DayDetailSheet: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 
     private func time(_ d: Date) -> String { HomeViewModel.clock(d, timeZone: model.timeZone) }
@@ -897,7 +897,7 @@ struct BreakdownSheet: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 
     func label(_ f: ScoreBreakdown.Factor) -> String {
@@ -959,7 +959,7 @@ struct ChipDetailSheet: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 
     /// 気象の取得状態：取得元、最後に取れた時刻、失敗の内容、再取得ボタン（実機での切り分け用）
@@ -1043,7 +1043,7 @@ struct SpotSwitchSheet: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 
     private func rowButton(title: String, subtitle: String, selected: Bool, accent: Bool, action: @escaping () -> Void) -> some View {

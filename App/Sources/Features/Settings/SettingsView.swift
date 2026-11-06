@@ -225,7 +225,7 @@ private struct TackleEditSheet: View {
                 TextField("ライン", text: $tackle.line).settingsRow()
             }
             .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
+            .background(ThemeBackground(name: .bgSheet))
             .navigationTitle("タックル")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -264,7 +264,7 @@ private struct RigEditSheet: View {
                 TextField("ワーム", text: $rig.worm).settingsRow()
             }
             .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
+            .background(ThemeBackground(name: .bgSheet))
             .navigationTitle("リグ")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { grams = rig.sinkerGrams == rig.sinkerGrams.rounded() ? String(Int(rig.sinkerGrams)) : String(rig.sinkerGrams) }
@@ -310,7 +310,7 @@ private struct InventoryEditSheet: View {
                 .settingsRow()
             }
             .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
+            .background(ThemeBackground(name: .bgSheet))
             .navigationTitle("在庫")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { countText = String(item.count); thresholdText = String(item.lowThreshold) }

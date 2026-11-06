@@ -40,7 +40,7 @@ struct LogView: View {
                 Text(s.report?.body ?? "").font(DS.Font.label).foregroundStyle(DS.Color.textSecondary)
                 Spacer()
             }
-            .padding(DS.Spacing.l).frame(maxWidth: .infinity, alignment: .leading).background(DS.Color.background)
+            .padding(DS.Spacing.l).frame(maxWidth: .infinity, alignment: .leading).background(ThemeBackground(name: .bgDetail))
             .presentationDetents([.medium, .large])
         }
         .confirmationDialog("この釣行を削除", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {

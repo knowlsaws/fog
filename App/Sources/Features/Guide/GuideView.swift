@@ -190,7 +190,7 @@ struct SpeciesDetailView: View {
                 Spacer(minLength: 0)
             }
         }
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
         .onAppear(perform: reload)
         .sheet(item: $editing) { c in CatchEditSheet(catchItem: c) { reload() }.presentationDetents([.medium]) }
     }
@@ -305,7 +305,7 @@ struct CatchEditSheet: View {
             Spacer()
         }
         .padding(DS.Spacing.l)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
         .onAppear { species = catchItem.species; lengthText = catchItem.lengthCm.map { String(Int($0.rounded())) } ?? "" }
         .catchDeleteDialog(item: $deleting) { _ in onDone(); dismiss() }
     }

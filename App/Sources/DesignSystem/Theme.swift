@@ -173,9 +173,11 @@ enum ThemeAssets {
         case charLog = "char_log"
         case charGuide = "char_guide"
         case charSpots = "char_spots"
+        case bgDetail = "bg_detail"
+        case charDetail = "char_detail"
 
         /// キャラクターの切り抜き（位置とサイズを設定で微調整できる）
-        var isCharacter: Bool { self == .charHome || self == .charLog || self == .charGuide || self == .charSpots }
+        var isCharacter: Bool { self == .charHome || self == .charLog || self == .charGuide || self == .charSpots || self == .charDetail }
 
         var note: String {
             switch self {
@@ -195,6 +197,8 @@ enum ThemeAssets {
             case .charLog: return "ログ：右上のキャラクター（縦 3:4・マゼンタ背景）"
             case .charGuide: return "図鑑：右上のキャラクター（縦 3:4・マゼンタ背景）"
             case .charSpots: return "釣り場：地図の左上のキャラクター（縦 3:4・マゼンタ背景）"
+            case .bgDetail: return "釣行詳細・各シートの背景（縦 9:16）"
+            case .charDetail: return "釣行詳細：右側のキャラクター（縦 3:4・マゼンタ背景）"
             }
         }
     }

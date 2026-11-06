@@ -63,7 +63,7 @@ struct SpotDetailView: View {
                 Spacer(minLength: 0)
             }
         }
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
         .onAppear(perform: reload)
         .alert("名前", isPresented: $renaming) {
             TextField("釣り場名", text: $newName)

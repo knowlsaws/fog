@@ -35,7 +35,11 @@ struct SessionDetailView: View {
             }
             .padding(DS.Spacing.l)
         }
-        .background(DS.Color.background)
+        .background(alignment: .trailing) {
+            // テーマのキャラクター（転スラ：リムル）。内容の後ろ、背景画像の前に置く
+            ThemeCharacter(name: .charDetail, baseWidth: 220).padding(.top, 260)
+        }
+        .background(ThemeBackground(name: .bgDetail))
         .task { computeReview() }
     }
 
@@ -227,7 +231,7 @@ struct AnalysisDetailView: View {
             }
             .padding(DS.Spacing.l)
         }
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 
     private func chip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {

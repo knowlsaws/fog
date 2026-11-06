@@ -174,7 +174,7 @@ struct MapLayerSettingsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgSheet))
         .navigationTitle("地図レイヤー")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(DS.Color.textSecondary) } } }

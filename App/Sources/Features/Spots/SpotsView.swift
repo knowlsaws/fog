@@ -393,7 +393,7 @@ struct SpotSearchSheet: View {
             }
         }
         .padding(DS.Spacing.l)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 
     private func search() async {
@@ -484,7 +484,7 @@ struct SpotCompareSheet: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
         .task(id: dayOffset) {
             loading = true
             rows = await model.compare(dayOffset: dayOffset)
@@ -588,6 +588,6 @@ struct FeedPinSheet: View {
         }
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(DS.Color.background)
+        .background(ThemeBackground(name: .bgDetail))
     }
 }
