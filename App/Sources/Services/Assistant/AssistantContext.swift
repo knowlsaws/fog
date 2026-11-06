@@ -8,20 +8,21 @@ enum AssistantContext {
         let store = services.store
         let tz = home.timeZone
         var lines: [String] = []
-        let day = Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "ja_JP"), timeZone: tz)
-        lines.append("今日: \(now.formatted(day))")
+        let f = DateFormatter(); f.locale = Locale(identifier: "ja_JP"); f.timeZone = tz
+        func fmt(_ d: Date, _ format: String) -> String { f.dateFormat = format; return f.string(from: d) }
+        lines.append("今日: \(fmt(now, "M月d日(E) H:mm"))")
         if let spot = home.spot { lines.append("ホームの釣り場: \(spot.name)") }
         if let s = home.score { lines.append("今の釣れ率: \(s.score)\(s.isForecast ? "（予報）" : "")") }
         for chip in home.chips { lines.append("\(chip.label): \(chip.value)") }
         if !home.weekOutlook.isEmpty {
             let week = home.weekOutlook.compactMap { d -> String? in
                 guard let m = d.maxScore else { return nil }
-                return "\(d.dayStart.formatted(.dateTime.month().day().locale(Locale(identifier: "ja_JP")).timeZone(tz))) 最高\(m)"
+                return "\(fmt(d.dayStart, "M/d(E)")) 最高\(m)"
             }
             lines.append("週の見通し: " + week.joined(separator: " / "))
         }
         if let next = home.tideExtremes.first {
-            lines.append("次の潮: \(next.kind == .high ? "満潮" : "干潮") \(next.at.formatted(.dateTime.hour().minute().timeZone(tz))) \(Int(next.levelCm.rounded()))cm")
+            lines.append("次の潮: \(next.kind == .high ? "満潮" : "干潮") \(fmt(next.at, "H:mm")) \(Int(next.levelCm.rounded()))cm")
         }
 
         let sessions = (try? store.sessions()) ?? []
@@ -32,7 +33,7 @@ enum AssistantContext {
         for s in closed.prefix(6) {
             let species = Dictionary(grouping: s.catches, by: \.species).map { "\($0.key.isEmpty ? "魚" : $0.key)\($0.value.count)" }.joined(separator: " ")
             let minutes = Int((s.duration ?? 0) / 60)
-            lines.append("- \(s.startedAt.formatted(.dateTime.month().day().hour().minute().timeZone(tz))) \(spotName(s.spotID)) \(minutes)分 \(s.catches.isEmpty ? "ボウズ" : species)")
+            lines.append("- \(fmt(s.startedAt, "M/d H:mm")) \(spotName(s.spotID)) \(minutes)分 \(s.catches.isEmpty ? "ボウズ" : species)")
         }
         let speciesStats = Analytics.speciesStats(catches: closed.flatMap(\.catches), timeZone: tz).prefix(8)
         if !speciesStats.isEmpty {
@@ -49,7 +50,7 @@ enum AssistantContext {
         if !notes.isEmpty {
             lines.append("地図のメモ:")
             for n in notes.prefix(12) {
-                lines.append("- \(n.createdAt.formatted(.dateTime.month().day().timeZone(tz))) \(n.placeName ?? "") \(n.text)")
+                lines.append("- \(fmt(n.createdAt, "M/d")) \(n.placeName ?? "") \(n.text)")
             }
         }
         let feeds = services.feeds.items.prefix(5)
