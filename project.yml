@@ -54,6 +54,8 @@ targets:
         NSCameraUsageDescription: 釣れた魚を撮影して記録します。
         NSPhotoLibraryUsageDescription: 釣行中に撮った写真を釣果として取り込みます。
         NSMotionUsageDescription: 釣行中の移動量を記録します。
+        NSMicrophoneUsageDescription: 店先で聞いた話を声で記録して、地図のメモにします。
+        NSSpeechRecognitionUsageDescription: 声を端末内で文字にして、メモと相談に使います。
         UIBackgroundModes: [location, fetch, processing, remote-notification]
         CFBundleURLTypes:
           - CFBundleURLName: ${BUNDLE_ID_PREFIX}.fog

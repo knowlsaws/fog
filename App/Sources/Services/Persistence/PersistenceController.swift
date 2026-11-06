@@ -25,6 +25,7 @@ final class PersistenceController {
         TackleRecord.self,
         RigRecord.self,
         SpeciesRecord.self,
+        NoteRecord.self,
     ])
 
     /// 設定画面（L15）でオフにできる。既定は有効。

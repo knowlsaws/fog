@@ -83,6 +83,9 @@ final class HomeViewModel {
     private(set) var liveNextTwilight: (label: String, at: Date)?
 
     private var services: AppServices?
+    /// 釣り場詳細に埋め込むとき：この釣り場に固定し、ウィジェット・通知の書き出しはしない（F-51）
+    var fixedSpotID: UUID?
+    var isEmbedded = false
     private let cache = AnalysisCache()
     private var timelineKey = ""
     private var dayCache: [Int: DayData] = [:]
@@ -211,7 +214,12 @@ final class HomeViewModel {
         } else if let last = sessions.first, let s = spots.first(where: { $0.id == last.spotID }) {
             spot = s
         }
-        let candidate = active?.track.last?.coordinate ?? spot?.coordinate ?? location ?? SampleData.hakodate
+        if let fixedSpotID, let s = spots.first(where: { $0.id == fixedSpotID }) {
+            spot = s
+            isRecording = false
+            liveSession = nil
+        }
+        let candidate = (fixedSpotID != nil ? spot?.coordinate : nil) ?? active?.track.last?.coordinate ?? spot?.coordinate ?? location ?? SampleData.hakodate
         coordinate = candidate.isPlausible ? candidate : (location ?? SampleData.hakodate)
 
         // 自分データの重み（削除が即時反映されるよう revision で捨てる）
@@ -284,6 +292,7 @@ final class HomeViewModel {
 
         // ウィジェット（15 分更新）とピーク通知（§8）
         // ウィジェットの書き出しは 10 分に 1 回（釣り場・記録中・予報・タックルが変わったときはすぐ）。毎 30 秒の再計算では書かない
+        guard !isEmbedded else { return }
         let widgetKey = "\(spot?.id.uuidString ?? "current")|\(isRecording)|\(key)|\(services.capture.currentTackle?.rawValue ?? "")"
         if widgetKey != lastWidgetKey || now.timeIntervalSince(lastWidgetPublishAt) > 600 {
             lastWidgetKey = widgetKey; lastWidgetPublishAt = now

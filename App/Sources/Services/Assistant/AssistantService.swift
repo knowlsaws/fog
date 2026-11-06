@@ -1,0 +1,143 @@
+import Foundation
+import os
+import Core
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+/// アプリ内の相談役（F-53）。端末内の言語モデル（Apple Intelligence）に、アプリの記録を渡して日本語で答えさせる。
+/// 店先で聞いた話（音声の書き起こし）は場所ごとに整理して地図のメモにする。通信はしない。
+@MainActor
+@Observable
+final class AssistantService {
+    struct Message: Identifiable, Hashable {
+        enum Role { case user, assistant }
+        let id = UUID()
+        let role: Role
+        var text: String
+    }
+
+    private(set) var messages: [Message] = []
+    private(set) var isResponding = false
+    private static let log = Logger(subsystem: "fog", category: "assistant")
+
+    #if canImport(FoundationModels)
+    private var session: LanguageModelSession?
+    #endif
+
+    /// 使えないときの理由（使えるときは nil）
+    var unavailableReason: String? {
+        #if canImport(FoundationModels)
+        switch SystemLanguageModel.default.availability {
+        case .available: return nil
+        case .unavailable(let reason):
+            switch reason {
+            case .deviceNotEligible: return "この端末では Apple Intelligence が使えません"
+            case .appleIntelligenceNotEnabled: return "設定 > Apple Intelligence と Siri をオンにしてください"
+            case .modelNotReady: return "モデルを準備中です。しばらくしてからもう一度"
+            @unknown default: return "Apple Intelligence が使えません"
+            }
+        }
+        #else
+        return "この OS では使えません"
+        #endif
+    }
+
+    private static let instructions = """
+    あなたは釣りアプリ「Fog」の相談役です。渡された【アプリの記録】だけを根拠に、日本語で短く（3 文以内を目安に）答えます。
+    記録に無いことは「記録にありません」と言い、推測で数値や魚種を作らないでください。釣りの一般的な助言は求められたときだけ添えます。
+    """
+
+    func clear() {
+        messages = []
+        #if canImport(FoundationModels)
+        session = nil
+        #endif
+    }
+
+    /// 質問に答える。`context` はアプリの記録の要約（毎回最新を渡す）
+    func ask(_ text: String, context: String) async {
+        let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty, !isResponding else { return }
+        messages.append(Message(role: .user, text: q))
+        if let reason = unavailableReason {
+            messages.append(Message(role: .assistant, text: reason))
+            return
+        }
+        isResponding = true
+        defer { isResponding = false }
+        #if canImport(FoundationModels)
+        if session == nil { session = LanguageModelSession(instructions: Self.instructions) }
+        let prompt = "【アプリの記録】\n\(context)\n\n【質問】\n\(q)"
+        do {
+            let response = try await session!.respond(to: prompt)
+            messages.append(Message(role: .assistant, text: response.content.trimmingCharacters(in: .whitespacesAndNewlines)))
+        } catch {
+            Self.log.notice("assistant failed: \(error.localizedDescription, privacy: .public)")
+            // 文脈が長すぎたときは会話を新しくして 1 回だけやり直す
+            session = LanguageModelSession(instructions: Self.instructions)
+            if let response = try? await session!.respond(to: prompt) {
+                messages.append(Message(role: .assistant, text: response.content.trimmingCharacters(in: .whitespacesAndNewlines)))
+            } else {
+                messages.append(Message(role: .assistant, text: "うまく答えられませんでした。短く言い換えてもう一度試してください"))
+            }
+        }
+        #endif
+    }
+
+    /// 店先で聞いた話を場所ごとに整理した結果
+    struct ShopItem: Hashable {
+        var place: String
+        var summary: String
+        var species: [String]
+    }
+
+    /// 書き起こし（または打ち込んだ話）を場所ごとの要点に整理する。整理できなければ全体を 1 件にする
+    func organizeShopTalk(_ transcript: String, hintPlaces: [String]) async -> [ShopItem] {
+        let t = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return [] }
+        #if canImport(FoundationModels)
+        guard unavailableReason == nil else { return [ShopItem(place: "", summary: t, species: [])] }
+        let instructions = """
+        あなたは釣具店や漁港で聞いた話をメモに整理する係です。入力は会話の書き起こしです。
+        場所（漁港名・地名）ごとに項目を分け、要点を 1〜2 文の日本語でまとめ、出てきた魚種を列挙します。
+        場所が分からない項目は place を空にします。話に無いことは書かないでください。
+        よく出る場所の名前：\(hintPlaces.prefix(30).joined(separator: "、"))
+        """
+        do {
+            let session = LanguageModelSession(instructions: instructions)
+            let response = try await session.respond(to: "書き起こし:\n\(t)", generating: ShopTalk.self)
+            let items = response.content.items.map { ShopItem(place: $0.place.trimmingCharacters(in: .whitespaces), summary: $0.summary.trimmingCharacters(in: .whitespacesAndNewlines), species: $0.species) }
+                .filter { !$0.summary.isEmpty }
+            return items.isEmpty ? [ShopItem(place: "", summary: t, species: [])] : items
+        } catch {
+            Self.log.notice("organize failed: \(error.localizedDescription, privacy: .public)")
+            return [ShopItem(place: "", summary: t, species: [])]
+        }
+        #else
+        return [ShopItem(place: "", summary: t, species: [])]
+        #endif
+    }
+
+    func append(assistant text: String) { messages.append(Message(role: .assistant, text: text)) }
+    func append(user text: String) { messages.append(Message(role: .user, text: text)) }
+}
+
+#if canImport(FoundationModels)
+/// 店先の話の整理結果（言語モデルに作らせる型）
+@Generable
+struct ShopTalk {
+    @Guide(description: "聞いた話を場所ごとにまとめた項目。場所が同じ話は 1 つにまとめる")
+    var items: [ShopTalkItem]
+}
+
+@Generable
+struct ShopTalkItem {
+    @Guide(description: "場所の名前（漁港名・地名）。分からなければ空文字")
+    var place: String
+    @Guide(description: "その場所について聞いた要点を 1〜2 文の日本語で")
+    var summary: String
+    @Guide(description: "話に出てきた魚の名前。無ければ空")
+    var species: [String]
+}
+#endif

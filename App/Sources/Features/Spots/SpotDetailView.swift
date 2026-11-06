@@ -13,12 +13,14 @@ struct SpotDetailView: View {
     @State private var renaming = false
     @State private var newName = ""
     @State private var confirmDelete = false
+    /// この釣り場に固定したホームの計算（推移グラフ・時刻表・週、F-51）
+    @State private var detailModel = HomeViewModel()
 
     var body: some View {
         GeometryReader { geo in
-            VStack(spacing: DS.Spacing.m) {
+            VStack(spacing: DS.Spacing.s) {
                 ZStack(alignment: .topTrailing) {
-                    heatmap.frame(height: geo.size.height * 0.38)
+                    heatmap.frame(height: geo.size.height * 0.22)
                     Menu {
                         Button("名前を変える") { newName = card.spot.name; renaming = true }
                         Button("削除", role: .destructive) { confirmDelete = true }
@@ -60,11 +62,23 @@ struct SpotDetailView: View {
                     briefing
                 }
                 .padding(.horizontal, DS.Spacing.l)
+                // ホームと同じ詳細（F-51）：この釣り場の釣れ率と潮位の推移、時刻ごとの天気・風・波、週の見通し
+                ForecastChart(model: detailModel)
+                    .frame(height: geo.size.height * 0.46)
+                    .padding(.horizontal, DS.Spacing.s)
+                    .background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+                    .padding(.horizontal, DS.Spacing.l)
                 Spacer(minLength: 0)
             }
         }
         .background(ThemeBackground(name: .bgDetail))
-        .onAppear(perform: reload)
+        .onAppear {
+            reload()
+            detailModel.fixedSpotID = card.spot.id
+            detailModel.isEmbedded = true
+            detailModel.attach(services)
+            Task { await detailModel.refresh() }
+        }
         .alert("名前", isPresented: $renaming) {
             TextField("釣り場名", text: $newName)
             Button("保存") { if !newName.isEmpty { var s = card.spot; s.name = newName; try? services.store.upsert(s) } }

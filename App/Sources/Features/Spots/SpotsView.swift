@@ -32,12 +32,24 @@ struct SpotsView: View {
     @State private var rasterCache: [Int: FieldRaster] = [:]
     @State private var rasterCacheKey = ""
     static let layerHours = 71
+    // 地図のメモ（F-52）
+    @State private var notes: [Core.Note] = []
+    @State private var placingNote = false
+    @State private var noteDraft: NoteDraft?
+    @State private var selectedNote: Core.Note?
+    struct NoteDraft: Identifiable { let id = UUID(); let coordinate: Coordinate }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             MapReader { proxy in
                 map.overlay {
                     if layersOn { MapLayersOverlay(proxy: proxy, raster: raster, particles: particles, animate: layer.vector != nil && MapLayerSettings.particles) }
+                }
+                // メモを置くモード：地図をタップした場所にメモを書く（F-52）
+                .onTapGesture(coordinateSpace: .local) { point in
+                    guard placingNote, let c = proxy.convert(point, from: .local) else { return }
+                    placingNote = false
+                    noteDraft = NoteDraft(coordinate: Coordinate(latitude: c.latitude, longitude: c.longitude))
                 }
             }
             .ignoresSafeArea(edges: .top)
@@ -63,6 +75,7 @@ struct SpotsView: View {
                         roundButton("list.number") { showCompare = true }
                         roundButton(layersOn ? "square.3.layers.3d.top.filled" : "square.3.layers.3d") { toggleLayers() }
                         roundButton(feedPinsOn ? "fish.fill" : "fish") { toggleFeedPins() }
+                        roundButton(placingNote ? "xmark" : "note.text.badge.plus") { placingNote.toggle() }
                         roundButton("location.fill") { if let c = model.currentLocation { camera = .region(MKCoordinateRegion(center: c.cl, latitudinalMeters: 3000, longitudinalMeters: 3000)) } }
                     }
                     .padding(DS.Spacing.l)
@@ -70,6 +83,15 @@ struct SpotsView: View {
                 Spacer()
             }
             cards
+            if placingNote {
+                VStack {
+                    Text("地図をタップしてメモを置く").font(DS.Font.label).foregroundStyle(DS.Color.background)
+                        .padding(.horizontal, DS.Spacing.l).padding(.vertical, DS.Spacing.s).background(DS.Color.accent, in: Capsule())
+                        .padding(.top, DS.Spacing.xl)
+                    Spacer()
+                }
+                .allowsHitTesting(false)
+            }
         }
         .onChange(of: layer) { _, _ in rebuildRaster() }
         .sheet(isPresented: $showLayerSettings, onDismiss: {
@@ -91,7 +113,14 @@ struct SpotsView: View {
                 camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 41.77, longitude: 140.73), latitudinalMeters: 20_000, longitudinalMeters: 20_000))
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in model.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .fogStoreDidChange)) { _ in model.refresh(); notes = (try? services.store.notes()) ?? [] }
+        .task { notes = (try? services.store.notes()) ?? [] }
+        .sheet(item: $noteDraft) { draft in
+            NoteEditSheet(coordinate: draft.coordinate, existing: nil, placeHint: model.placeName(near: draft.coordinate)).presentationDetents([.medium])
+        }
+        .sheet(item: $selectedNote) { note in
+            NoteEditSheet(coordinate: note.coordinate, existing: note, placeHint: note.placeName ?? model.placeName(near: note.coordinate)).presentationDetents([.medium])
+        }
         .onChange(of: selectedID) { _, id in
             if let id, let c = model.allCards.first(where: { $0.spot.id == id }), c.spot.coordinate.isPlausible { withAnimation { camera = .region(region(for: c.spot.coordinate)) } }
         }
@@ -135,6 +164,12 @@ struct SpotsView: View {
             if let c = model.currentLocation {
                 Annotation("", coordinate: c.cl, anchor: .center) {
                     Circle().fill(.white).frame(width: 10, height: 10).overlay(Circle().stroke(DS.Color.background, lineWidth: 2))
+                }
+            }
+            // 地図のメモ（F-52）：黄色い付箋。タップで内容・編集・削除
+            ForEach(notes) { note in
+                Annotation("", coordinate: note.coordinate.cl, anchor: .bottom) {
+                    Button { selectedNote = note } label: { NoteMarker(note: note) }.buttonStyle(.plain)
                 }
             }
             // RSS の記事から拾った釣果（F-44）：場所ごとに 1 つ。新しいほど濃い。釣り場の点と同じ場所のものは点の上に載せる（上）
@@ -658,5 +693,89 @@ struct FeedPinSheet: View {
         .padding(DS.Spacing.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(ThemeBackground(name: .bgDetail))
+    }
+}
+
+
+/// 地図のメモの印（F-52）：黄色い付箋に先頭の文字
+struct NoteMarker: View {
+    let note: Core.Note
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 3) {
+                Image(systemName: note.source == .voice ? "waveform" : "note.text").font(.system(size: 9, weight: .bold))
+                Text(String(note.text.prefix(8))).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+            }
+            .foregroundStyle(DS.Color.background)
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background(DS.Color.sun, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Triangle().fill(DS.Color.sun).frame(width: 8, height: 5)
+        }
+        .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+    }
+
+    struct Triangle: Shape {
+        func path(in r: CGRect) -> Path {
+            var p = Path()
+            p.move(to: CGPoint(x: r.minX, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY)); p.addLine(to: CGPoint(x: r.midX, y: r.maxY)); p.closeSubpath()
+            return p
+        }
+    }
+}
+
+/// メモの作成・編集（F-52）
+struct NoteEditSheet: View {
+    let coordinate: Coordinate
+    let existing: Core.Note?
+    let placeHint: String?
+    @Environment(AppServices.self) private var services
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var place = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.m) {
+            HStack {
+                Text(existing == nil ? "メモを置く" : "メモ").font(DS.Font.number(20)).foregroundStyle(DS.Color.textPrimary)
+                Spacer()
+                if let e = existing {
+                    Text(e.createdAt, format: .dateTime.month().day().hour().minute()).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary)
+                }
+            }
+            TextField("場所（任意）", text: $place)
+                .font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                .padding(DS.Spacing.m).background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip))
+            TextField("店先で聞いた話など", text: $text, axis: .vertical)
+                .lineLimit(4...8)
+                .font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                .padding(DS.Spacing.m).background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip))
+            HStack {
+                if let e = existing {
+                    Button(role: .destructive) { try? services.store.deleteNote(id: e.id); dismiss() } label: {
+                        Text("削除").font(DS.Font.label).foregroundStyle(DS.Color.holiday)
+                    }
+                }
+                Spacer()
+                Button { save() } label: {
+                    Text("保存").font(DS.Font.label).foregroundStyle(DS.Color.background)
+                        .padding(.horizontal, DS.Spacing.l).padding(.vertical, DS.Spacing.s).background(DS.Color.accent, in: Capsule())
+                }
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Spacer()
+        }
+        .padding(DS.Spacing.l)
+        .background(ThemeBackground(name: .bgDetail))
+        .onAppear { text = existing?.text ?? ""; place = existing?.placeName ?? placeHint ?? "" }
+    }
+
+    private func save() {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var note = existing ?? Core.Note(coordinate: coordinate, text: trimmed)
+        note.text = trimmed
+        note.placeName = place.isEmpty ? nil : place
+        try? services.store.upsert(note)
+        dismiss()
     }
 }
