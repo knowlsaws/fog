@@ -196,15 +196,49 @@ enum ThemeAssets {
         let key = "\(theme.rawValue)/\(name.rawValue)"
         if let cached = cache[key] { return cached }
         var found: Loaded?
-        for ext in ["png", "jpg", "jpeg"] {
-            if let url = Bundle.main.url(forResource: name.rawValue, withExtension: ext, subdirectory: "Themes/\(theme.rawValue)"),
-               let image = UIImage(contentsOfFile: url.path) {
-                found = prepare(image)
-                break
+        if let dir = directory(for: theme) {
+            for ext in ["png", "jpg", "jpeg", "PNG", "JPG"] {
+                let url = dir.appendingPathComponent("\(name.rawValue).\(ext)")
+                if FileManager.default.fileExists(atPath: url.path), let image = UIImage(contentsOfFile: url.path) {
+                    found = prepare(image)
+                    break
+                }
             }
         }
         cache[key] = found
         return found
+    }
+
+    /// テーマの画像フォルダ。フォルダ参照の置かれ方の違いに備えて、バンドル直下の `Themes/<theme>`、`<theme>`、
+    /// そしてバンドル内を 2 階層まで探して `<theme>` という名前のフォルダを使う
+    static func directory(for theme: AppTheme) -> URL? {
+        guard let root = Bundle.main.resourceURL else { return nil }
+        let fm = FileManager.default
+        var candidates = [root.appendingPathComponent("Themes/\(theme.rawValue)"), root.appendingPathComponent(theme.rawValue)]
+        if let sub = Bundle.main.url(forResource: theme.rawValue, withExtension: nil, subdirectory: "Themes") { candidates.append(sub) }
+        for c in candidates {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: c.path, isDirectory: &isDir), isDir.boolValue { return c }
+        }
+        // 2 階層まで探す
+        if let e = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+            for case let url as URL in e {
+                if e.level > 2 { e.skipDescendants(); continue }
+                if url.lastPathComponent == theme.rawValue, (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true { return url }
+            }
+        }
+        return nil
+    }
+
+    /// 設定 > テーマ の診断用：フォルダの場所とファイル数
+    static func diagnostics(for theme: AppTheme) -> String {
+        guard let dir = directory(for: theme) else {
+            let top = (try? FileManager.default.contentsOfDirectory(atPath: Bundle.main.resourceURL?.path ?? "")) ?? []
+            return "画像フォルダが見つかりません（バンドル直下: \(top.prefix(12).joined(separator: ", "))）"
+        }
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        let rel = dir.path.replacingOccurrences(of: Bundle.main.resourceURL?.path ?? "", with: "")
+        return "フォルダ \(rel)：\(files.count) ファイル"
     }
 
     /// 四隅の色で背景を判定する。マゼンタ（#FF00FF 付近）なら透過に抜き、黒なら screen で重ね、それ以外はそのまま
@@ -330,7 +364,7 @@ enum ThemeAssets {
         let key = "\(theme.rawValue)/\(name.rawValue)"
         if let c = circleCache[key] { return c }
         var spec = CircleSpec()
-        if let url = Bundle.main.url(forResource: name.rawValue, withExtension: "json", subdirectory: "Themes/\(theme.rawValue)"),
+        if let url = directory(for: theme)?.appendingPathComponent("\(name.rawValue).json"),
            let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(CircleSpec.self, from: data) {
             spec = decoded
         }
