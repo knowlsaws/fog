@@ -1010,7 +1010,9 @@ struct SpotSwitchSheet: View {
         let origin = model.currentLocation
         VStack(alignment: .leading, spacing: DS.Spacing.m) {
             Text("釣り場").font(.system(size: 22, weight: .bold)).foregroundStyle(DS.Color.textPrimary)
-            TextField("漁港名で探す（全国）", text: $query)
+            TextField("漁港名で探す（全国、かな・ローマ字でも）", text: $query)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .onAppear { PortReadingIndex.shared.prepare(catalog: PortCatalog.bundled()) }
                 .font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
                 .padding(DS.Spacing.m).background(DS.Color.panel, in: RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous))
             ScrollView(showsIndicators: false) {

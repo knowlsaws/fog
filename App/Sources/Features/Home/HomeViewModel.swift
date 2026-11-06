@@ -469,7 +469,11 @@ final class HomeViewModel {
         let q = query.trimmingCharacters(in: .whitespaces)
         let base = Self.portCatalog.ports
         let origin = currentLocation ?? coordinate
-        let filtered = q.isEmpty ? base : base.filter { $0.name.contains(q) }
+        // 文字があるときは、よみ（かな・ローマ字）でも当たる索引を使う（F-50）。索引がまだ無ければ名前の部分一致
+        let filtered: [Core.Port]
+        if q.isEmpty { filtered = base }
+        else if !PortReadingIndex.shared.entries.isEmpty { filtered = PortReadingIndex.shared.search(q, limit: 200) }
+        else { filtered = base.filter { $0.name.contains(q) } }
         return filtered.sorted { Geo.distanceMeters($0.coordinate, origin) < Geo.distanceMeters($1.coordinate, origin) }.prefix(limit).map { $0 }
     }
 

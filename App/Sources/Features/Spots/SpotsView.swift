@@ -364,36 +364,80 @@ struct SpotCardView: View {
     }
 }
 
-/// 検索（全国の地名・漁港名）。
+/// 検索（全国の漁港名・地名、F-50）。1 文字打つごとに同梱の港データをよみで絞り込み（かな・ローマ字・漢字）、
+/// 少し遅れて MapKit の候補（地名）も足す。Enter で MapKit の全文検索。
 struct SpotSearchSheet: View {
     let onPick: (MKMapItem) -> Void
     @State private var text = ""
+    @State private var ports: [Port] = []
+    @State private var completions: [MKLocalSearchCompletion] = []
     @State private var results: [MKMapItem] = []
+    @State private var completer = Completer()
+    @State private var debounce: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: DS.Spacing.m) {
-            TextField("地名・漁港名", text: $text)
+            TextField("漁港名・地名（かな・ローマ字でも）", text: $text)
                 .font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
                 .padding(DS.Spacing.m).background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip))
                 .onSubmit { Task { await search() } }
             ScrollView {
                 VStack(spacing: DS.Spacing.s) {
-                    ForEach(Array(results.enumerated()), id: \.offset) { _, item in
-                        Button { onPick(item) } label: {
-                            VStack(alignment: .leading) {
-                                Text(item.name ?? "").font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
-                                Text(item.placemark.title ?? "").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(DS.Spacing.m).background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip))
+                    ForEach(ports) { port in
+                        Button { onPick(Self.mapItem(for: port)) } label: {
+                            row(port.name, (port.pref.flatMap { PortReadingIndex.prefectures[$0] } ?? "") + (port.kind == .fishing ? " 漁港" : " 港湾"))
                         }
                         .buttonStyle(.plain)
+                    }
+                    ForEach(Array(completions.enumerated()), id: \.offset) { _, c in
+                        Button { Task { await pick(c) } } label: { row(c.title, c.subtitle) }.buttonStyle(.plain)
+                    }
+                    ForEach(Array(results.enumerated()), id: \.offset) { _, item in
+                        Button { onPick(item) } label: { row(item.name ?? "", item.placemark.title ?? "") }.buttonStyle(.plain)
+                    }
+                    if text.isEmpty {
+                        Text("例：しかべ、hakodate、森港").font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).padding(.top, DS.Spacing.s)
                     }
                 }
             }
         }
         .padding(DS.Spacing.l)
         .background(ThemeBackground(name: .bgDetail))
+        .onAppear {
+            PortReadingIndex.shared.prepare(catalog: PortCatalog.bundled())
+            completer.onUpdate = { completions = $0 }
+        }
+        .onChange(of: text) { _, t in
+            ports = PortReadingIndex.shared.search(t)
+            results = []
+            debounce?.cancel()
+            debounce = Task {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                completer.update(query: t)
+            }
+        }
+    }
+
+    private func row(_ title: String, _ subtitle: String) -> some View {
+        VStack(alignment: .leading) {
+            Text(title).font(DS.Font.label).foregroundStyle(DS.Color.textPrimary)
+            Text(subtitle).font(DS.Font.caption).foregroundStyle(DS.Color.textTertiary).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(DS.Spacing.m).background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.chip))
+    }
+
+    private static func mapItem(for port: Port) -> MKMapItem {
+        let item = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: port.lat, longitude: port.lon)))
+        item.name = port.name
+        return item
+    }
+
+    private func pick(_ completion: MKLocalSearchCompletion) async {
+        let request = MKLocalSearch.Request(completion: completion)
+        if let item = (try? await MKLocalSearch(request: request).start())?.mapItems.first { onPick(item) }
     }
 
     private func search() async {
@@ -401,6 +445,31 @@ struct SpotSearchSheet: View {
         request.naturalLanguageQuery = text
         request.region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 38, longitude: 137), latitudinalMeters: 2_000_000, longitudinalMeters: 2_000_000)
         results = (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
+    }
+
+    /// MapKit の入力補完（地名）。日本全体を対象にする
+    @MainActor
+    final class Completer: NSObject, MKLocalSearchCompleterDelegate {
+        private let completer = MKLocalSearchCompleter()
+        var onUpdate: (([MKLocalSearchCompletion]) -> Void)?
+        override init() {
+            super.init()
+            completer.delegate = self
+            completer.resultTypes = [.address, .pointOfInterest]
+            completer.region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 38, longitude: 137), latitudinalMeters: 2_000_000, longitudinalMeters: 2_000_000)
+        }
+        func update(query: String) {
+            if query.trimmingCharacters(in: .whitespaces).isEmpty { onUpdate?([]); completer.cancel(); return }
+            completer.queryFragment = query
+        }
+        nonisolated func completer(_ completer: MKLocalSearchCompleter, didUpdateResults results: [MKLocalSearchCompletion]) {
+            // 港は同梱データで出すので、MapKit からは地名と港以外の候補を少しだけ
+            let items = Array(results.prefix(8))
+            Task { @MainActor in self.onUpdate?(items) }
+        }
+        nonisolated func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+            Task { @MainActor in self.onUpdate?([]) }
+        }
     }
 }
 
