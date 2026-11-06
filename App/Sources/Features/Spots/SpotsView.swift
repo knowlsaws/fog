@@ -41,6 +41,15 @@ struct SpotsView: View {
                 }
             }
             .ignoresSafeArea(edges: .top)
+            // テーマのキャラクター（転スラ：地図の左上にカレラ）。地図の操作は通さないが、その領域のタップは地図に届く
+            .overlay(alignment: .topLeading) {
+                GeometryReader { g in
+                    ThemeCharacter(name: .charSpots, baseWidth: g.size.width * 0.42)
+                        .frame(width: g.size.width, height: g.size.height, alignment: .topLeading)
+                        .padding(.top, DS.Spacing.xl)
+                }
+                .allowsHitTesting(false)
+            }
             VStack {
                 HStack(alignment: .top) {
                     if layersOn {

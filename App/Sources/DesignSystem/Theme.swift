@@ -8,12 +8,14 @@ import CoreImage.CIFilterBuiltins
 enum AppTheme: String, CaseIterable, Identifiable {
     case dark
     case grimoire
+    case tensura
 
     var id: String { rawValue }
     var label: String {
         switch self {
         case .dark: return "ダーク"
         case .grimoire: return "フリーレン"
+        case .tensura: return "転スラ"
         }
     }
 
@@ -28,20 +30,21 @@ enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .dark: return .dark
         case .grimoire: return .grimoire
+        case .tensura: return .tensura
         }
     }
 
     /// 文字のデザイン。魔導書はセリフ体（New York）
     var fontDesign: Font.Design {
         switch self {
-        case .dark: return .default
+        case .dark, .tensura: return .default
         case .grimoire: return .serif
         }
     }
 
     var numberDesign: Font.Design {
         switch self {
-        case .dark: return .rounded
+        case .dark, .tensura: return .rounded
         case .grimoire: return .serif
         }
     }
@@ -107,6 +110,27 @@ struct ThemePalette {
         panel: Color.white.opacity(0.72),
         scrim: Color.white.opacity(0.30)
     )
+
+    /// 転スラ：漆黒にリムルの水色。面は半透明の黒で背景画像（各キャラの色の亀裂）を透かす
+    static let tensura = ThemePalette(
+        background: Color(red: 0.04, green: 0.04, blue: 0.05),      // #0A0A0C
+        surface: Color(red: 0.08, green: 0.08, blue: 0.10).opacity(0.90),
+        surfaceRaised: Color(red: 0.16, green: 0.16, blue: 0.19),
+        accent: Color(red: 0.37, green: 0.83, blue: 0.95),          // リムルの水色 #5FD3F3
+        secondary: Color(red: 0.37, green: 0.83, blue: 0.95),
+        sun: Color(red: 0.96, green: 0.77, blue: 0.26),
+        daylight: Color(red: 1.0, green: 0.478, blue: 0.102),
+        textPrimary: .white,
+        textSecondary: .white.opacity(0.72),
+        textTertiary: .white.opacity(0.45),
+        faded: .white.opacity(0.25),
+        sea: Color(red: 0.30, green: 0.62, blue: 0.95),
+        moon: Color(red: 0.62, green: 0.56, blue: 0.90),
+        saturday: Color(red: 0.36, green: 0.64, blue: 1.0),
+        holiday: Color(red: 1.0, green: 0.36, blue: 0.36),
+        panel: Color(red: 0.08, green: 0.08, blue: 0.10).opacity(0.82),
+        scrim: Color.black.opacity(0.25)
+    )
 }
 
 /// 選択中のテーマ。`@Observable` なので、`DS.Color.*` を読む全ビューが切替で再描画される
@@ -148,9 +172,10 @@ enum ThemeAssets {
         case charHome = "char_home"
         case charLog = "char_log"
         case charGuide = "char_guide"
+        case charSpots = "char_spots"
 
         /// キャラクターの切り抜き（位置とサイズを設定で微調整できる）
-        var isCharacter: Bool { self == .charHome || self == .charLog || self == .charGuide }
+        var isCharacter: Bool { self == .charHome || self == .charLog || self == .charGuide || self == .charSpots }
 
         var note: String {
             switch self {
@@ -169,6 +194,7 @@ enum ThemeAssets {
             case .charHome: return "ホーム：釣れ率の円を両手で囲むキャラクター（横 16:9・円は高さの 44%）"
             case .charLog: return "ログ：右上のキャラクター（縦 3:4・マゼンタ背景）"
             case .charGuide: return "図鑑：右上のキャラクター（縦 3:4・マゼンタ背景）"
+            case .charSpots: return "釣り場：地図の左上のキャラクター（縦 3:4・マゼンタ背景）"
             }
         }
     }
